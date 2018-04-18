@@ -3614,16 +3614,10 @@ static void tcp_xmit_recovery(struct sock *sk, int rexmit)
 /* Returns the number of packets newly acked or sacked by the current ACK */
 static u32 tcp_newly_delivered(struct sock *sk, u32 prior_delivered, int flag)
 {
-	const struct net *net = sock_net(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	u32 delivered;
 
 	delivered = tp->delivered - prior_delivered;
-	NET_ADD_STATS(net, LINUX_MIB_TCPDELIVERED, delivered);
-	if (flag & FLAG_ECE) {
-		tp->delivered_ce += delivered;
-		NET_ADD_STATS(net, LINUX_MIB_TCPDELIVEREDCE, delivered);
-	}
 	return delivered;
 }
 
@@ -3788,8 +3782,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 no_queue:
 	/* If data was DSACKed, see if we can undo a cwnd reduction. */
 	if (flag & FLAG_DSACKING_ACK) {
-		tcp_fastretrans_alert(sk, prior_snd_una, num_dupack, &flag,
-				      &rexmit);
+		tcp_fastretrans_alert(sk, acked, is_dupack, &flag, &rexmit);
 		tcp_newly_delivered(sk, delivered, flag);
 	}
 	/* If this ack opens up a zero window, clear backoff.  It was
@@ -3813,8 +3806,7 @@ old_ack:
 	if (TCP_SKB_CB(skb)->sacked) {
 		flag |= tcp_sacktag_write_queue(sk, skb, prior_snd_una,
 						&sack_state);
-		tcp_fastretrans_alert(sk, prior_snd_una, num_dupack, &flag,
-				      &rexmit);
+		tcp_fastretrans_alert(sk, acked, is_dupack, &flag, &rexmit);
 		tcp_newly_delivered(sk, delivered, flag);
 		tcp_xmit_recovery(sk, rexmit);
 	}
