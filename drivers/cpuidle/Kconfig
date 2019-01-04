@@ -31,6 +31,15 @@ config CPU_IDLE_GOV_MOBILE
 	  suits very well on embedded systems where the interrupts are
 	  grouped on a single core and the power is the priority.
 
+config CPU_IDLE_GOV_TEO
+	bool "Timer events oriented (TEO) governor (for tickless systems)"
+	help
+	  This governor implements a simplified idle state selection method
+	  focused on timer events and does not do any interactivity boosting.
+
+	  Some workloads benefit from using it and it generally should be safe
+	  to use.  Say Y here if you are not happy with the alternatives.
+
 config DT_IDLE_STATES
 	bool
 
