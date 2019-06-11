@@ -1310,6 +1310,16 @@ config UCLAMP_ASSIST
 	help
 	  This option enabled in-kernel uclamp setting overrides
 
+config CPUSETS_ASSIST
+	bool "Cpusets configuration helper"
+	depends on CPUSETS
+	depends on ANDROID
+	help
+	  This option enables the configuration of default cpusets
+	  parameters from kernel.
+
+	  If unsure, say N.
+
 config SPRD_ROTATION_TASK
 	bool "Sprd rotation task"
 	default y
