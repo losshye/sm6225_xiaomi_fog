@@ -390,7 +390,9 @@ static int teo_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	int i;
 
 	if (dev->last_state_idx >= 0) {
+	if (dev->last_state_idx >= 0) {
 		teo_update(drv, dev);
+		dev->last_state_idx = -1;
 		dev->last_state_idx = -1;
 	}
 
@@ -670,6 +672,7 @@ static void teo_reflect(struct cpuidle_device *dev, int state)
 {
 	struct teo_cpu *cpu_data = per_cpu_ptr(&teo_cpus, dev->cpu);
 
+	dev->last_state_idx = state;
 	dev->last_state_idx = state;
 	/*
 	 * If the wakeup was not "natural", but triggered by one of the safety
