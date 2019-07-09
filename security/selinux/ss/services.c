@@ -735,6 +735,7 @@ static inline int security_validtrans_handle_fail(struct selinux_state *state,
 					   struct context *tcontext,
 					   u16 tclass)
 {
+#ifdef CONFIG_AUDIT
 	struct policydb *p = &state->ss->policydb;
 #ifdef CONFIG_AUDIT
 	char *o = NULL, *n = NULL, *t = NULL;
@@ -1655,8 +1656,8 @@ static inline int compute_sid_handle_invalid_context(
 	u16 tclass,
 	struct context *newcontext)
 {
-	struct policydb *policydb = &state->ss->policydb;
 #ifdef CONFIG_AUDIT
+        struct policydb *policydb = &state->ss->policydb;
 	char *s = NULL, *t = NULL, *n = NULL;
 	u32 slen, tlen, nlen;
 
@@ -1677,6 +1678,7 @@ out:
 	kfree(t);
 	kfree(n);
 #endif
+
 	if (!enforcing_enabled(state))
 		return 0;
 	return -EACCES;
@@ -1971,12 +1973,12 @@ static inline int convert_context_handle_invalid_context(
 	struct selinux_state *state,
 	struct context *context)
 {
+#ifdef CONFIG_AUDIT
 	struct policydb *policydb = &state->ss->policydb;
 #ifdef CONFIG_AUDIT
 	char *s;
 	u32 len;
 #endif
-
 	if (enforcing_enabled(state))
 		return -EINVAL;
 
@@ -2133,6 +2135,8 @@ bad:
 	pr_info("SELinux:  Context %s became invalid (unmapped).\n",
 		newc->str);
 #else
+	context_destroy(newc);
+#endif
 	return 0;
 #endif
 }
