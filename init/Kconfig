@@ -1327,6 +1327,25 @@ config UCLAMP_ASSIST
 	help
 	  This option enabled in-kernel uclamp setting overrides
 
+config CPUSETS_ASSIST
+	bool "Cpusets configuration helper"
+	depends on CPUSETS
+	depends on ANDROID
+	help
+	  This option enables the configuration of default cpusets
+	  parameters from kernel.
+
+	  If unsure, say N.
+
+config CPUSETS_ASSIST
+	bool "Cpuset configuration helper"
+	depends on CPUSETS
+	depends on ANDROID
+	help
+	  This option enables in-kernel overrides for cpuset values.
+
+	  If unsure, say N.
+
 config RT_SOFTIRQ_AWARE_SCHED
 	bool "Improve RT scheduling during long softirq execution"
 	depends on SMP && !PREEMPT_RT
