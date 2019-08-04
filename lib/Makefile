@@ -55,6 +55,7 @@ obj-y += bcd.o div64.o sort.o parser.o random32.o \
 	 once.o refcount.o usercopy.o errseq.o bucket_locks.o
 obj-$(CONFIG_DEBUG_KERNEL) += debug_locks.o
 obj-$(CONFIG_STRING_SELFTEST) += test_string.o
+obj-$(CONFIG_DEBUG_KERNEL) += debug_locks.o
 obj-y += string_helpers.o
 obj-$(CONFIG_TEST_STRING_HELPERS) += test-string_helpers.o
 obj-y += hexdump.o
