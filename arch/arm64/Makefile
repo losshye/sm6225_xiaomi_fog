@@ -56,13 +56,7 @@ $(warning Detected assembler with broken .inst; disassembly will be unreliable)
   endif
 endif
 
-ifeq ($(cc-name),clang)
-KBUILD_CFLAGS	+= -mno-implicit-float
-KBUILD_CFLAGS   += -mcpu=cortex-a77
-KBUILD_AFLAGS   += -mcpu=cortex-a77
-else
 KBUILD_CFLAGS	+= -mgeneral-regs-only
-endif
 KBUILD_CFLAGS	+= $(lseinstr) $(brokengasinst) $(compat_vdso)
 KBUILD_CFLAGS	+= -fno-asynchronous-unwind-tables
 KBUILD_CFLAGS	+= $(call cc-disable-warning, psabi)
