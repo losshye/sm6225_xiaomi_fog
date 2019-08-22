@@ -39,83 +39,26 @@ static void anxiety_merged_requests(struct request_queue *q, struct request *rq,
 	list_del_init(&next->queuelist);
 }
 
-static inline int __anxiety_dispatch(struct request_queue *q,
-		struct request *rq)
+static inline struct request *anxiety_choose_request(struct anxiety_data *adata)
 {
-	if (unlikely(!rq))
-		return -EINVAL;
+	/* Prioritize reads unless writes are exceedingly starved */
+	bool starved = adata->writes_starved >= adata->max_writes_starved;
 
-	list_del_init(&rq->queuelist);
-	elv_dispatch_add_tail(q, rq);
-
-	return 0;
-}
-
-static uint16_t anxiety_dispatch_batch(struct request_queue *q)
-{
-	struct anxiety_data *adata = q->elevator->elevator_data;
-	uint8_t i, j;
-	uint16_t dispatched = 0;
-	int ret;
-
-	/* Perform each batch adata->batch_count many times */
-	for (i = 0; i < adata->batch_count; i++) {
-		/* Batch sync requests according to tunables */
-		for (j = 0; j < adata->sync_ratio; j++) {
-			if (list_empty(&adata->sync_queue))
-				break;
-
-			ret = __anxiety_dispatch(q,
-				anxiety_next_entry(&adata->sync_queue));
-
-			if (!ret)
-				dispatched++;
-		}
-
-		/* Submit one async request after the sync batch to avoid starvation */
-		if (!list_empty(&adata->async_queue)) {
-			ret = __anxiety_dispatch(q,
-				anxiety_next_entry(&adata->async_queue));
-
-			if (!ret)
-				dispatched++;
-		}
-
-		/* If we didn't have anything to dispatch; don't batch again */
-		if (!dispatched)
-			break;
+	/* Handle a read request */
+	if (!starved && !list_empty(&adata->queue[READ])) {
+		adata->writes_starved++;
+		return rq_entry_fifo(adata->queue[READ].next);
 	}
 
-	return dispatched;
-}
-
-static uint16_t anxiety_dispatch_drain(struct request_queue *q)
-{
-	struct anxiety_data *adata = q->elevator->elevator_data;
-	uint16_t dispatched = 0;
-	int ret;
-
-	/*
-	 * Drain out all of the synchronous requests first,
-	 * then drain the asynchronous requests.
-	 */
-	while (!list_empty(&adata->sync_queue)) {
-		ret = __anxiety_dispatch(q,
-			anxiety_next_entry(&adata->sync_queue));
-
-		if (!ret)
-			dispatched++;
+	/* Handle a write request */
+	if (!list_empty(&adata->queue[WRITE])) {
+		adata->writes_starved = 0;
+		return rq_entry_fifo(adata->queue[WRITE].next);
 	}
 
-	while (!list_empty(&adata->async_queue)) {
-		ret = __anxiety_dispatch(q,
-			anxiety_next_entry(&adata->async_queue));
-
-		if (!ret)
-			dispatched++;
-	}
-
-	return dispatched;
+	/* If there are no requests, then there is nothing to starve */
+	adata->writes_starved = 0;
+	return NULL;
 }
 
 static int anxiety_dispatch(struct request_queue *q, int force)
