@@ -53,12 +53,13 @@ static inline struct request *anxiety_choose_request(struct anxiety_data *adata)
 
 static int anxiety_dispatch(struct request_queue *q, int force)
 {
-	/*
-	 * When requested by the elevator, a full queue drain can be
-	 * performed in one scheduler dispatch.
-	 */
-	if (unlikely(force))
-		return anxiety_dispatch_drain(q);
+	struct request *rq = anxiety_choose_request(q->elevator->elevator_data);
+
+	if (!rq)
+		return 0;
+
+	list_del_init(&rq->queuelist);
+	elv_dispatch_sort(q, rq);
 
 	return anxiety_dispatch_batch(q);
 }
