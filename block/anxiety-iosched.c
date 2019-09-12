@@ -51,6 +51,12 @@ static inline struct request *anxiety_choose_request(struct anxiety_data *adata)
 	return NULL;
 }
 
+static void __anxiety_dispatch(struct request_queue *q, struct request *rq)
+{
+	list_del_init(&rq->queuelist);
+	elv_dispatch_sort(q, rq);
+}
+
 static int anxiety_dispatch(struct request_queue *q, int force)
 {
 	struct request *rq = anxiety_choose_request(q->elevator->elevator_data);
@@ -58,8 +64,7 @@ static int anxiety_dispatch(struct request_queue *q, int force)
 	if (!rq)
 		return 0;
 
-	list_del_init(&rq->queuelist);
-	elv_dispatch_sort(q, rq);
+	__anxiety_dispatch(q, rq);
 
 	return anxiety_dispatch_batch(q);
 }
