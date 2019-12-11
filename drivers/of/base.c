@@ -1119,6 +1119,11 @@ struct device_node *of_find_node_by_phandle(phandle handle)
 	if (phandle_cache[handle_hash] &&
 	    handle == phandle_cache[handle_hash]->phandle)
 		np = phandle_cache[handle_hash];
+	if (np && of_node_check_flag(np, OF_DETACHED)) {
+		WARN_ON(1); /* did not uncache np on node removal */
+		phandle_cache[handle_hash] = NULL;
+		np = NULL;
+	}
 
 	if (!np) {
 		for_each_of_allnodes(np)

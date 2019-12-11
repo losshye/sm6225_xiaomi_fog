@@ -76,7 +76,9 @@ static inline void __of_detach_node_sysfs(struct device_node *np) {}
 int of_resolve_phandles(struct device_node *tree);
 #endif
 
+#if defined(CONFIG_OF_DYNAMIC)
 void __of_phandle_cache_inv_entry(phandle handle);
+#endif
 
 #if defined(CONFIG_OF_OVERLAY)
 void of_overlay_mutex_lock(void);
