@@ -1609,6 +1609,13 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags,
 			goto out_unlock;
 
 		/*
+		 * Bail out if we were forcing a migration to find a better
+		 * fitting CPU but our search failed.
+		 */
+		if (!test && target != -1 && !rt_task_fits_capacity(p, target))
+			goto out_unlock;
+
+		/*
 		 * If cpu is non-preemptible, prefer remote cpu
 		 * even if it's running a higher-prio task.
 		 * Otherwise: Don't bother moving it if the
