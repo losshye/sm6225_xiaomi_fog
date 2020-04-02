@@ -43,6 +43,8 @@ static int cfq_max_async_dispatch = 8;
 
 extern struct blkcg *blkcg_bg;
 
+extern struct blkcg *blkcg_bg;
+
 /*
  * offset from end of queue service tree for idle class
  */
