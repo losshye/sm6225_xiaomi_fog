@@ -91,7 +91,6 @@ static unsigned int adreno_ft_regs_default[] = {
 /* Nice level for the higher priority GPU start thread */
 int adreno_wake_nice = -7;
 
-
 void adreno_reglist_write(struct adreno_device *adreno_dev,
 		const struct adreno_reglist *list, u32 count)
 {
@@ -405,17 +404,21 @@ void adreno_gmu_send_nmi(struct adreno_device *adreno_dev)
 	wmb();
 }
 
+/*
+ * A workqueue callback responsible for actually turning on the GPU after a
+ * touch event. kgsl_pwrctrl_change_state(ACTIVE) is used without any
+ * active_count protection to avoid the need to maintain state.  Either
+ * somebody will start using the GPU or the idle timer will fire and put the
+ * GPU back into slumber.
+ */
 static void adreno_pwr_on_work(struct work_struct *work)
 {
-
 	struct adreno_device *adreno_dev =
 		container_of(work, typeof(*adreno_dev), pwr_on_work);
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 
 	mutex_lock(&device->mutex);
-
 	kgsl_pwrctrl_change_state(device, KGSL_STATE_ACTIVE);
-
 	mutex_unlock(&device->mutex);
 }
 
@@ -1124,9 +1127,6 @@ static int adreno_of_get_power(struct adreno_device *adreno_dev,
 
 	device->pwrctrl.bus_control = of_property_read_bool(node,
 		"qcom,bus-control");
-
-	device->pwrctrl.input_disable = of_property_read_bool(node,
-		"qcom,disable-wake-on-touch");
 
 	return 0;
 }
