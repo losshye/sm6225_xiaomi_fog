@@ -479,6 +479,21 @@ static int cpuhp_qcom_online(unsigned int cpu)
 	return 0;
 }
 
+static bool of_find_freq(u32 *of_table, int of_len, long frequency)
+{
+	int i;
+
+	if (!of_table)
+		return true;
+
+	for (i = 0; i < of_len; i++) {
+		if (frequency == of_table[i])
+			return true;
+	}
+
+	return false;
+}
+
 static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 				    struct cpufreq_qcom *c)
 {
@@ -569,6 +584,9 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 		per_cpu(cpufreq_boost_pcpu, cpu).c = c;
 		per_cpu(cpufreq_boost_pcpu, cpu).max_index = i - 1;
 	}
+
+	if (of_table)
+			devm_kfree(dev, of_table);
 
 	if (c->skip_data.skip) {
 		pr_info("%s Skip: Index[%u], Frequency[%u], Core Count %u, Final Index %u Actual Index %u Prev_Freq[%u] Prev_Index[%u] Prev_CC[%u]\n",
