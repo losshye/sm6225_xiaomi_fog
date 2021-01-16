@@ -2531,7 +2531,9 @@ static int __set_cpus_allowed_ptr_locked(struct task_struct *p,
 
 	if (kthread || is_migration_disabled(p)) {
 		/*
-		 * Kernel threads are allowed on online && !active CPUs.
+		 * Kernel threads are allowed on online && !active CPUs,
+		 * however, during cpu-hot-unplug, even these might get pushed
+		 * away if not KTHREAD_IS_PER_CPU.
 		 *
 		 * Specifically, migration_disabled() tasks must not fail the
 		 * cpumask_any_and_distribute() pick below, esp. so on
@@ -2596,16 +2598,6 @@ static int __set_cpus_allowed_ptr_locked(struct task_struct *p,
 	}
 #endif
         __do_set_cpus_allowed(p, ctx);
-
-	if (p->flags & PF_KTHREAD) {
-		/*
-		 * For kernel threads that do indeed end up on online &&
-		 * !active we want to ensure they are strict per-CPU threads.
-		 */
-		WARN_ON(cpumask_intersects(ctx->new_mask, cpu_online_mask) &&
-			!cpumask_intersects(ctx->new_mask, cpu_active_mask) &&
-			p->nr_cpus_allowed != 1);
-	}
 
 	return affine_move_task(rq, p, rf, dest_cpu, ctx->flags);
 
@@ -8109,6 +8101,13 @@ int sched_cpu_deactivate(unsigned int cpu)
 	int ret;
 
 	set_cpu_active(cpu, false);
+
+	/*
+	 * From this point forward, this CPU will refuse to run any task that
+	 * is not: migrate_disable() or KTHREAD_IS_PER_CPU, and will actively
+	 * push those tasks away until this gets cleared, see
+	 * sched_cpu_dying().
+	 */
 	balance_push_set(cpu, true);
 
 	/*
