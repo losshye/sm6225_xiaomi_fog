@@ -134,6 +134,13 @@ int __weak arch_asym_cpu_priority(int cpu)
  */
 #define fits_capacity(cap, max)	((cap) * 1280 < (max) * 1024)
 
+/*
+ * The margin used when comparing CPU capacities.
+ * is 'cap1' noticeably greater than 'cap2'
+ *
+ * (default: ~5%)
+ */
+#define capacity_greater(cap1, cap2) ((cap1) * 1024 > (cap2) * 1078)
 #endif
 
 #ifdef CONFIG_CFS_BANDWIDTH
@@ -10167,20 +10174,6 @@ group_is_overloaded(struct lb_env *env, struct sg_lb_stats *sgs)
 	return false;
 }
 
-/*
- * group_similar_cpu_capacity: Returns true if the minimum capacity of the
- * compared groups differ by less than 12.5%.
- */
-static inline bool
-group_similar_cpu_capacity(struct sched_group *sg, struct sched_group *ref)
-{
-	long diff = sg->sgc->min_capacity - ref->sgc->min_capacity;
-	long max = max(sg->sgc->min_capacity, ref->sgc->min_capacity);
-
-	return ((abs(diff) < max >> 3) ||
-		asym_cap_siblings(group_first_cpu(sg), group_first_cpu(ref)));
-}
-
 static inline enum
 group_type group_classify(struct sched_group *group,
 			  struct sg_lb_stats *sgs)
@@ -10359,15 +10352,6 @@ static bool update_sd_pick_busiest(struct lb_env *env,
 	 */
 	if (sgs->sum_nr_running <= sgs->group_weight &&
 	    capacity_greater(sg->sgc->min_capacity, capacity_of(env->dst_cpu)))
-		return false;
-
-	/*
-	 * Candidate sg doesn't face any severe imbalance issues so
-	 * don't disturb unless the groups are of similar capacity
-	 * where balancing is more harmless.
-	 */
-	if (sgs->group_type == group_other &&
-		!group_similar_cpu_capacity(sds->local, sg))
 		return false;
 
 	/*
@@ -11044,10 +11028,8 @@ static struct rq *find_busiest_queue(struct lb_env *env,
 		 * average load.
 		 */
 		if (env->sd->flags & SD_ASYM_CPUCAPACITY &&
-                    !capacity_greater(capacity_of(env->dst_cpu), capacity) &&
-		    (rq->nr_running == 1 ||
-			 (rq->nr_running == 2 && task_util(rq->curr) <
-			  sched_small_task_threshold)))
+		    !capacity_greater((capacity_of(env->dst_cpu)), capacity) &&
+		    rq->nr_running == 1)
 			continue;
 
 		wl = weighted_cpuload(rq);
