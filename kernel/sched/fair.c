@@ -12439,8 +12439,7 @@ static int idle_balance(struct rq *this_rq, struct rq_flags *rf)
 	int pulled_task = 0;
 	u64 avg_idle = this_rq->avg_idle;
 
-	if (cpu_isolated(this_cpu))
-		return 0;
+	update_misfit_status(NULL, this_rq);
 
 	/*
 	 * There is a task waiting to run. No need to search for one.
@@ -12527,7 +12526,7 @@ static int idle_balance(struct rq *this_rq, struct rq_flags *rf)
 		 * tasks on this rq or if active migration kicked in.
 		 */
 		if (pulled_task || this_rq->nr_running > 0 ||
-		    !continue_balancing || this_rq->ttwu_pending)
+		    this_rq->ttwu_pending)
 			break;
 	}
 	rcu_read_unlock();
