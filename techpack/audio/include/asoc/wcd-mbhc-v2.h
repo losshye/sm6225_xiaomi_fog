@@ -143,6 +143,7 @@ do {                                                    \
 #define MAX_IMPED 100000
 #define HPHL_CROSS_CONN_THRESHOLD 100
 #define HPHR_CROSS_CONN_THRESHOLD 100
+#define MAX_IMPED 100000
 
 #define WCD_MBHC_BTN_PRESS_COMPL_TIMEOUT_MS  50
 #define ANC_DETECT_RETRY_CNT 7
