@@ -426,6 +426,17 @@ config MSM_TZ_SMMU
 
 	  If unsure, say N.
 
+config ICNSS_DEBUG
+	bool "ICNSS debug support"
+	depends on ICNSS
+	depends on DEBUG_FS
+	default n
+	---help---
+	  Say 'Y' here to enable ICNSS driver debug support. Debug support
+	  primarily consists of logs consisting of information related to
+	  hardware register access and enabling BUG_ON for certain cases to aid
+	  the debugging.
+
 config MSM_SERVICE_LOCATOR
 	bool "Service Locator"
 	depends on QCOM_QMI_HELPERS
