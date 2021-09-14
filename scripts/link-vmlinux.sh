@@ -47,8 +47,7 @@ modpost_link()
 	local lds=""
 
 	objects="--whole-archive				\
-		${KBUILD_VMLINUX_INIT}				\
-		${KBUILD_VMLINUX_MAIN}				\
+		${KBUILD_VMLINUX_OBJS}				\
 		--no-whole-archive				\
 		--start-group					\
 		${KBUILD_VMLINUX_LIBS}				\
@@ -79,21 +78,19 @@ vmlinux_link()
 	local objects
 
 	if [ "${SRCARCH}" != "um" ]; then
-		objects="--whole-archive			\
-			${KBUILD_VMLINUX_INIT}			\
-			${KBUILD_VMLINUX_MAIN}			\
-			--start-group				\
-			${KBUILD_VMLINUX_LIBS}			\
+		objects="--whole-archive	\
+			${KBUILD_VMLINUX_OBJS}	\
+			--start-group			\
+			${KBUILD_VMLINUX_LIBS}	\
 			--end-group				\
 			${1}"
 
 		${LD} ${KBUILD_LDFLAGS} ${LDFLAGS_vmlinux} -o ${2}	\
 			-T ${lds} ${objects}
 	else
-		objects="-Wl,--whole-archive			\
-			${KBUILD_VMLINUX_INIT}			\
-			${KBUILD_VMLINUX_MAIN}			\
-			-Wl,--no-whole-archive			\
+		objects="-Wl,--whole-archive	\
+			${KBUILD_VMLINUX_OBJS}		\
+			-Wl,--no-whole-archive		\
 			-Wl,--start-group			\
 			${KBUILD_VMLINUX_LIBS}		\
 			-Wl,--end-group				\
