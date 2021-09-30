@@ -1528,6 +1528,10 @@ struct task_struct {
 	struct mutex			futex_exit_mutex;
 #endif
 
+#ifdef CONFIG_SPRD_ROTATION_TASK
+	u64 last_enqueue_ts;
+#endif
+
 	/* bca62a0ae565 ("sched/tune: Fix improper accounting of tasks") */
 #ifdef CONFIG_SCHED_TUNE
 	ANDROID_KABI_USE(7, int stune_idx);
