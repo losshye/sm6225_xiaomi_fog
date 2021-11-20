@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-only
+obj-$(CONFIG_GSI) += gsi.o
 
-gsidbg-$(CONFIG_GSI) += gsi_dbg.o
-obj-$(CONFIG_GSI) += gsi.o gsidbg.o
+ifeq ($(CONFIG_DEBUG_FS), y)
+	obj-$(CONFIG_GSI) += gsi_dbg.o
+endif
 
 obj-$(CONFIG_IPA_EMULATION) += gsi_emulation.o
