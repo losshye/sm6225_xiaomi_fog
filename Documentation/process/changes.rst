@@ -30,7 +30,7 @@ you probably needn't concern yourself with isdn4k-utils.
         Program        Minimal version       Command to check the version
 ====================== ===============  ========================================
 GNU C                  4.6              gcc --version
-Clang/LLVM (optional)  10.0.1           clang --version
+Clang/LLVM (optional)  11.0.0           clang --version
 GNU make               3.81             make --version
 binutils               2.20             ld -v
 flex                   2.5.35           flex --version
