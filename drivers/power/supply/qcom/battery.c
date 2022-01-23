@@ -105,7 +105,9 @@ struct pl_data {
 	int			main_fcc_max;
 	enum power_supply_type	charger_type;
 	/* debugfs directory */
+#ifdef CONFIG_DEBUG_FS
 	struct dentry		*dfs_root;
+#endif
 	u32			float_voltage_uv;
 };
 
@@ -120,7 +122,9 @@ enum {
 	FORCE_INOV_DISABLE_BIT	= BIT(1),
 };
 
+#ifdef CONFIG_DEBUG_FS
 static int debug_mask;
+#endif
 
 #ifdef CONFIG_DEBUG_FS
 #define pl_dbg(chip, reason, fmt, ...)				\
