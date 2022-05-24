@@ -415,6 +415,12 @@ static void scan_and_kill(void) {
   nr_victims = 0;
 }
 
+void simple_lmk_trigger(void)
+{
+	if (!atomic_cmpxchg_acquire(&needs_reclaim, 0, 1))
+		wake_up(&oom_waitq);
+}
+
 static void simple_lmk_reclaim_work(struct work_struct *data) {
   scan_and_kill();
   queue_delayed_work(kill_work_queue, &kill_task_work, 5000);
