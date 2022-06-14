@@ -42,6 +42,11 @@ static atomic_t needs_reclaim = ATOMIC_INIT(0);
 static atomic_t needs_reap = ATOMIC_INIT(0);
 static atomic_t nr_killed = ATOMIC_INIT(0);
 
+enum {
+	PRIO_APP_FOREGROUND = 10,
+	PRIO_APP_BACKGROUND_NOT_CLOSED = 20,
+};
+
 static int victim_cmp(const void *lhs_ptr, const void *rhs_ptr)
 {
 	const struct victim_info *lhs = (typeof(lhs))lhs_ptr;
@@ -76,7 +81,7 @@ static unsigned long find_victims(int *vindex)
 	struct task_struct *tsk;
 
 	rcu_read_lock();
-	for_each_process(tsk) {
+	for_each_process (tsk) {
 		struct signal_struct *sig;
 		short adj;
 
@@ -254,32 +259,31 @@ static void scan_and_kill(void)
 		struct task_struct *t, *vtsk = victim->tsk;
 		struct mm_struct *mm = victim->mm;
 
-		// If the task is kthread, continue
+		// If the task is kthread, don't kill
 		if (vtsk->flags & PF_KTHREAD) {
-			pr_info("Not killing %s. Reason: Is kthread", vtsk->comm);
 			task_unlock(vtsk);
 			continue;
 		}
 
 		// Do not kill uninterruptible processes
 		if (vtsk->state & TASK_UNINTERRUPTIBLE) {
-			pr_info("Not killing %s. Reason: The process is uninterruptible", vtsk->comm);
 			task_unlock(vtsk);
 			continue;
 		}
 
-		// Check the oom_score_adj value before kill
-		if (vtsk->signal->oom_score_adj >= 920) {
-			// Background Process
-			pr_info("Proceeding the kill of background process %s", vtsk->comm);
+		// The app process' priority values should be correct, but for compatibility.
+		if (task_prio(vtsk) >= PRIO_APP_FOREGROUND && task_prio(vtsk) < PRIO_APP_BACKGROUND_NOT_CLOSED) {
+			pr_info("Process %s has high priority %d, maybe foreground app, not killing!",
+				vtsk->comm, task_prio(vtsk));
+			task_unlock(vtsk);
+			continue;
+
 		} else {
-			if (vtsk->signal->oom_score_adj == 700) {
-				// The app is in background but user didnt close it. Somethinge like it is on recents app list
-				pr_info("The process %s not clased by the user.. Skipping kill", vtsk->comm);
-				task_unlock(vtsk);	
-				continue;
-			} else {
-				pr_info("The process %s somehow has high priority. Skipping kill", vtsk->comm);
+			// Check the oom_score_adj value before kill
+			if (vtsk->signal->oom_score_adj < 900) {
+				pr_info("Process %s has low priority but oom_score_adj is %d, not killing!",
+					vtsk->comm,
+					vtsk->signal->oom_score_adj);
 				task_unlock(vtsk);
 				continue;
 			}
@@ -306,7 +310,7 @@ static void scan_and_kill(void)
 		 * long time for exit_mmap() to complete.
 		 */
 		rcu_read_lock();
-		for_each_thread(vtsk, t)
+		for_each_thread (vtsk, t)
 			set_tsk_thread_flag(t, TIF_MEMDIE);
 		for_each_thread(vtsk, t)
 			set_task_rt_prio(t, 1);
