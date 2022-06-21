@@ -11,15 +11,17 @@
 #include <linux/moduleparam.h>
 #include <linux/oom.h>
 #include <linux/sched/mm.h>
-#include <linux/sort.h>
 #include <linux/vmpressure.h>
 #include <uapi/linux/sched/types.h>
+#include <linux/sort.h>
+#include <linux/slab.h>
+#include <linux/vmalloc.h>
 
 /* The minimum number of pages to free per reclaim */
 #define MIN_FREE_PAGES (CONFIG_ANDROID_SIMPLE_LMK_MINFREE * SZ_1M / PAGE_SIZE)
 
 /* Kill up to this many victims per reclaim */
-#define MAX_VICTIMS 1024
+#define MAX_VICTIMS 16
 
 /* Timeout in jiffies for each reclaim */
 #define RECLAIM_EXPIRES msecs_to_jiffies(CONFIG_ANDROID_SIMPLE_LMK_TIMEOUT_MSEC)
@@ -31,13 +33,14 @@ struct victim_info {
 };
 
 static struct victim_info victims[MAX_VICTIMS] __cacheline_aligned_in_smp;
+static struct task_struct *pending __cacheline_aligned_in_smp;
 static struct task_struct *task_bucket[SHRT_MAX + 1] __cacheline_aligned;
 static DECLARE_WAIT_QUEUE_HEAD(oom_waitq);
 static DECLARE_WAIT_QUEUE_HEAD(reaper_waitq);
 static DECLARE_COMPLETION(reclaim_done);
 static __cacheline_aligned_in_smp DEFINE_RWLOCK(mm_free_lock);
 static int nr_victims;
-static bool reclaim_active;
+static bool init_done = false;
 static atomic_t needs_reclaim = ATOMIC_INIT(0);
 static atomic_t needs_reap = ATOMIC_INIT(0);
 static atomic_t nr_killed = ATOMIC_INIT(0);
@@ -194,28 +197,80 @@ static int process_victims(int vlen)
 	return nr_to_kill;
 }
 
-static void set_task_rt_prio(struct task_struct *tsk, int priority)
+static void kill_task(struct task_struct *vtsk)
 {
-	const struct sched_param rt_prio = {
-		.sched_priority = priority
-	};
+	static const struct sched_param sched_zero_prio = { .sched_priority =
+								    0 };
+	struct task_struct *t;
+	/* Accelerate the victim's death by forcing the kill signal */
+	do_send_sig_info(SIGKILL, SEND_SIG_FORCED, vtsk, true);
 
-	sched_setscheduler_nocheck(tsk, SCHED_RR, &rt_prio);
+	/* Mark the thread group dead so that other kernel code knows */
+	rcu_read_lock();
+	for_each_thread (vtsk, t)
+		set_tsk_thread_flag(t, TIF_MEMDIE);
+	rcu_read_unlock();
+
+	/* Elevate the victim to SCHED_RR with zero RT priority */
+	sched_setscheduler_nocheck(vtsk, SCHED_RR, &sched_zero_prio);
+
+	/* Allow the victim to run on any CPU. This won't schedule. */
+	set_cpus_allowed_ptr(vtsk, cpu_all_mask);
+
+	/* Signals can't wake frozen tasks; only a thaw operation can */
+	__thaw_task(vtsk);
+
+	task_unlock(vtsk);
+}
+
+/*
+ * Avoid using vmalloc for a small buffer.
+ * Should not be used when the size is statically known.
+ */
+
+static void *kvmalloc(unsigned long size)
+{
+	if (size > PAGE_SIZE)
+		return vmalloc(size);
+	else
+		return kmalloc(size, GFP_ATOMIC);
+}
+
+static void simple_lmk_kvfree(unsigned long size, void *addr)
+{
+	if (size > PAGE_SIZE)
+		vfree(addr);
+	else
+		kfree(addr);
 }
 
 static void scan_and_kill(void)
 {
-	int i, nr_to_kill, nr_found = 0;
+	int j, i, nr_to_kill, nr_found = 0;
+	static int k = 0;
 	unsigned long pages_found;
+	struct task_struct *tmp;
 
-	/*
-	 * Reset nr_victims so the reaper thread and simple_lmk_mm_freed() are
-	 * aware that the victims array is no longer valid.
-	 */
-	write_lock(&mm_free_lock);
-	nr_victims = 0;
-	write_unlock(&mm_free_lock);
+	if (init_done && k != 0) {
+		for (j = 0; j < k; j++) {
+			struct task_struct *target = &pending[j];
+			if (!target)
+				continue;
+			pr_info("Process PPID check comm: %s\n", target->comm);
+			if (task_ppid_nr(target) == 1) {
+				task_lock(target);
+				pr_info("Killing process %d with PPID 1!!\n",
+					target->pid);
+				kill_task(target);
+			}
+		}
+		simple_lmk_kvfree(k * sizeof(struct task_struct), pending);
+		k = 0;
+	} else {
+		init_done = true;
+	}
 
+	tmp = kvmalloc(MAX_VICTIMS * sizeof(struct task_struct));
 	/* Populate the victims array with tasks sorted by adj and then size */
 	pages_found = find_victims(&nr_found);
 	if (unlikely(!nr_found)) {
@@ -256,8 +311,7 @@ static void scan_and_kill(void)
 	/* Kill the victims */
 	for (i = 0; i < nr_to_kill; i++) {
 		struct victim_info *victim = &victims[i];
-		struct task_struct *t, *vtsk = victim->tsk;
-		struct mm_struct *mm = victim->mm;
+		struct task_struct *vtsk = victim->tsk;
 
 		// If the task is kthread, don't kill
 		if (vtsk->flags & PF_KTHREAD) {
@@ -265,25 +319,28 @@ static void scan_and_kill(void)
 			continue;
 		}
 
-		// Do not kill uninterruptible processes
-		if (vtsk->state & TASK_UNINTERRUPTIBLE) {
-			task_unlock(vtsk);
-			continue;
-		}
-
 		// The app process' priority values should be correct, but for compatibility.
-		if (task_prio(vtsk) >= PRIO_APP_FOREGROUND && task_prio(vtsk) < PRIO_APP_BACKGROUND_NOT_CLOSED) {
-			pr_info("Process %s has high priority %d, maybe foreground app, not killing!",
-				vtsk->comm, task_prio(vtsk));
-			task_unlock(vtsk);
-			continue;
+		if (task_prio(vtsk) >= PRIO_APP_FOREGROUND &&
+		    task_prio(vtsk) < PRIO_APP_BACKGROUND_NOT_CLOSED) {
+			if (task_ppid_nr(vtsk) == 1) {
+				pr_info("Found process with high priority but PPID is 1. Killing!\n");
+			} else {
+				pr_info("Process %s has high priority %d, maybe foreground app, not killing!\n",
+					vtsk->comm, task_prio(vtsk));
+				tmp[k] = *vtsk;
+				k++;
+				task_unlock(vtsk);
+				continue;
+			}
 
 		} else {
 			// Check the oom_score_adj value before kill
 			if (vtsk->signal->oom_score_adj < 900) {
-				pr_info("Process %s has low priority but oom_score_adj is %d, not killing!",
+				pr_info("Process %s has low priority but oom_score_adj is %d, not killing!\n",
 					vtsk->comm,
 					vtsk->signal->oom_score_adj);
+				tmp[k] = *vtsk;
+				k++;
 				task_unlock(vtsk);
 				continue;
 			}
@@ -292,41 +349,7 @@ static void scan_and_kill(void)
 		pr_info("Killing %s with adj %d to free %lu KiB\n", vtsk->comm,
 			vtsk->signal->oom_score_adj,
 			victim->size << (PAGE_SHIFT - 10));
-
-		/* Make the victim reap anonymous memory first in exit_mmap() */
-		set_bit(MMF_OOM_VICTIM, &mm->flags);
-
-		/* Accelerate the victim's death by forcing the kill signal */
-		do_send_sig_info(SIGKILL, SEND_SIG_FORCED, vtsk, PIDTYPE_TGID);
-
-		/*
-		 * Mark the thread group dead so that other kernel code knows,
-		 * and then elevate the thread group to SCHED_RR with minimum RT
-		 * priority. The entire group needs to be elevated because
-		 * there's no telling which threads have references to the mm as
-		 * well as which thread will happen to put the final reference
-		 * and release the mm's memory. If the mm is released from a
-		 * thread with low scheduling priority then it may take a very
-		 * long time for exit_mmap() to complete.
-		 */
-		rcu_read_lock();
-		for_each_thread (vtsk, t)
-			set_tsk_thread_flag(t, TIF_MEMDIE);
-		for_each_thread(vtsk, t)
-			set_task_rt_prio(t, 1);
-		rcu_read_unlock();
-
-		/* Allow the victim to run on any CPU. This won't schedule. */
-		set_cpus_allowed_ptr(vtsk, cpu_all_mask);
-
-		/* Signals can't wake frozen tasks; only a thaw operation can */
-		__thaw_task(vtsk);
-
-		/* Store the number of anon pages to sort victims for reaping */
-		victim->size = get_mm_counter(mm, MM_ANONPAGES);
-
-		/* Finally release the victim's task lock acquired earlier */
-		task_unlock(vtsk);
+		kill_task(vtsk);
 	}
 
 	/*
@@ -343,13 +366,19 @@ static void scan_and_kill(void)
 		wake_up(&reaper_waitq);
 
 	/* Wait until all the victims die or until the timeout is reached */
-	if (!wait_for_completion_timeout(&reclaim_done, RECLAIM_EXPIRES))
-		pr_info("Timeout hit waiting for victims to die, proceeding\n");
+	wait_for_completion_timeout(&reclaim_done, RECLAIM_EXPIRES);
 
 	/* Clean up for future reclaims but let the reaper thread keep going */
 	write_lock(&mm_free_lock);
 	reinit_completion(&reclaim_done);
-	reclaim_active = false;
+	if (k != 0) {
+		pending = kvmalloc(k * sizeof(struct task_struct));
+		memcpy(pending, tmp, k * sizeof(struct task_struct));
+	} else {
+		pr_info("Foreground app count 0, Skip kmalloc\n");
+	}
+	simple_lmk_kvfree(MAX_VICTIMS * sizeof(struct task_struct), tmp);
+	nr_victims = 0;
 	nr_killed = (atomic_t)ATOMIC_INIT(0);
 	write_unlock(&mm_free_lock);
 }
