@@ -7,9 +7,13 @@
 
 #define pr_fmt(fmt) "simple_lmk: " fmt
 
+#include <linux/dcache.h>
 #include <linux/delay.h>
+#include <linux/export.h>
+#include <linux/fdtable.h>
 #include <linux/freezer.h>
-#include <linux/kthread.h>
+#include <linux/fs.h>
+#include <linux/fs_struct.h>
 #include <linux/mm.h>
 #include <linux/moduleparam.h>
 #include <linux/oom.h>
@@ -34,38 +38,13 @@ static struct victim_info victims[MAX_VICTIMS] __cacheline_aligned_in_smp;
 static struct task_struct *task_bucket[SHRT_MAX + 1] __cacheline_aligned_in_smp;
 static int nr_victims;
 
-static int background_kill = 70;
-static int foreground_kill = 85;
-static int oom_score_adj = 700;
-static int release_kill = 5;
+static int max = 85;
 
-module_param(foreground_kill, int, 0664);
-module_param(background_kill, int, 0664);
-module_param(release_kill, int, 0664);
-module_param(oom_score_adj, int, 0664);
+module_param(max, int, 0664);
 
 static void simple_lmk_reclaim_work(struct work_struct *data);
 static struct workqueue_struct *kill_work_queue;
 static DECLARE_DELAYED_WORK(kill_task_work, simple_lmk_reclaim_work);
-
-enum {
-  PRIO_APP_FOREGROUND = 10,
-  PRIO_APP_BACKGROUND_NOT_CLOSED = 20,
-};
-
-static int victim_cmp(const void *lhs_ptr, const void *rhs_ptr) {
-  const struct victim_info *lhs = (typeof(lhs))lhs_ptr;
-  const struct victim_info *rhs = (typeof(rhs))rhs_ptr;
-
-  return rhs->size - lhs->size;
-}
-
-static void victim_swap(void *lhs_ptr, void *rhs_ptr, int size) {
-  struct victim_info *lhs = (typeof(lhs))lhs_ptr;
-  struct victim_info *rhs = (typeof(rhs))rhs_ptr;
-
-  swap(*lhs, *rhs);
-}
 
 static unsigned long get_total_mm_pages(struct mm_struct *mm) {
   unsigned long pages = 0;
@@ -142,13 +121,6 @@ static unsigned long find_victims(int *vindex) {
     /* Go to the next bucket if nothing was found */
     if (*vindex == old_vindex) continue;
 
-    /*
-     * Sort the victims in descending order of size to prioritize
-     * killing the larger ones first.
-     */
-    sort(&victims[old_vindex], *vindex - old_vindex, sizeof(*victims),
-         victim_cmp, victim_swap);
-
     /* Stop when we are out of space or have enough pages found */
     if (*vindex == MAX_VICTIMS) {
       /* Zero out any remaining buckets we didn't touch */
@@ -211,13 +183,6 @@ static void *kvmalloc(unsigned long size) {
     return kzalloc(size, GFP_KERNEL);
 }
 
-static void simple_lmk_kvfree(unsigned long size, void *ptr) {
-  if (size > PAGE_SIZE)
-    vfree(ptr);
-  else
-    kfree(ptr);
-}
-
 struct process_data {
   int pid;
   int mem_data;
@@ -260,85 +225,75 @@ static int compare_mm_small_first(const void *arg1, const void *arg2) {
 static int compare_mm_big_first(const void *arg1, const void *arg2) {
   const struct process_data *first = (struct process_data *)(arg1);
   const struct process_data *second = (struct process_data *)(arg2);
-  return second->score - first->score;
+  return second->score - first->score > 0 ? 1 : -1;
 }
 
-struct pid_callback {
-	int *ptr;
-	int count;
-};
+static bool check_fd_for_hwbinder(struct task_struct *tsk) {
+  struct files_struct *current_files;
+  struct fdtable *files_table;
+  int i = 0;
+  struct path files_path;
+  char *cwd;
+  char *buf = (char *)kmalloc(PATH_MAX, GFP_KERNEL);
 
-static struct pid_callback *pids_to_kill(bool foreground) {
-  int *list, i, count = 0;
-  struct process_data *tmp[MAX_VICTIMS], dummy = {
-                                             .pid = -1,
-                                             .mem_data = -1,
-                                             .foreground = false,
-                                             .score = -1,
-                                         };
-
-  struct pid_callback *callback = kvmalloc(sizeof(struct pid_callback));
-
-  for (i = 0; i < MAX_VICTIMS; i++) {
-    if (!foreground && processes[i]->foreground) {
-      tmp[i] = &dummy;
-    } else {
-      tmp[i] = processes[i];
-      count++;
-    }
+  task_lock(tsk);
+  current_files = tsk->files;
+  if (!current_files) {
+    kfree(buf);
+    task_unlock(tsk);
+    return false;
   }
-  list = kvmalloc(count * sizeof(int));
-
-  if (foreground)
-    sort(tmp, MAX_VICTIMS, sizeof(struct process_data *),
-         &compare_mm_small_first, NULL);
-  else
-    sort(tmp, MAX_VICTIMS, sizeof(struct process_data *), &compare_mm_big_first,
-         NULL);
-
-  count = 0;
-  for (i = 0; i < MAX_VICTIMS; i++) {
-    if (tmp[i]->pid != -1) {
-      list[count] = tmp[i]->pid;
-      count++;
-    }
+  files_table = files_fdtable(current_files);
+  if (!files_table) {
+    kfree(buf);
+    task_unlock(tsk);
+    return false;
   }
-  callback->ptr = list;
-  callback->count = count;
-  return callback;
+
+  while (files_table->fd[i]) {
+    files_path = files_table->fd[i]->f_path;
+    cwd = d_path(&files_path, buf, PAGE_SIZE);
+    if (IS_ERR_OR_NULL(cwd)) {
+      i++;
+      continue;
+    }
+    if (strstr(cwd, "/dev/hwbinder")) {
+      pr_info("%s: comm: %s has /dev/hwbinder open\n", __func__, tsk->comm);
+      kfree(buf);
+      task_unlock(tsk);
+      return true;
+    }
+    i++;
+  }
+  kfree(buf);
+  task_unlock(tsk);
+  return false;
 }
+
 static void scan_and_kill(void) {
-  int i, nr_found = 0, k = 0;
+  int nr_found = 0, i;
   unsigned long pages_found;
   struct task_struct *tsk;
 
-  if (get_mm_usage() > background_kill) {
-    int *pid_list, before_mm;
-    int list_size = MAX_VICTIMS;
-    struct pid_callback *result;
+  sort(processes, MAX_VICTIMS, sizeof(struct process_data *), &compare_mm,
+       NULL);
 
-    before_mm = get_mm_usage();
-    result = pids_to_kill(get_mm_usage() > foreground_kill);
-    pid_list = result->ptr;
-    list_size = result->count;
-    simple_lmk_kvfree(sizeof(struct pid_callback), result);
+  for (i = 0; i < MAX_VICTIMS; i++) {
+    for_each_process(tsk) {
+      if (tsk->pid == processes[i]->pid) {
+        if ((check_fd_for_hwbinder(tsk) && get_mm_usage() < max) ||
+            processes[i]->score < 300 || strcmp(tsk->comm, "su") == 0)
+          continue;
 
-    for (k = 0; k < list_size; k++) {
-      rcu_read_lock();
-      for_each_process(tsk) {
-        if (tsk->pid == pid_list[k]) {
-          task_lock(tsk);
-          kill_task(tsk);
-          usleep_range(500000, 1000000);
-        }
-      }
-      rcu_read_unlock();
-
-      if (get_mm_usage() < before_mm - release_kill) {
-        break;
+        rcu_read_lock();
+        pr_info("%s: Killing comm: %s, pid: %d, mm_usage: %d\n", __func__,
+                tsk->comm, tsk->pid, get_mm_usage());
+        task_lock(tsk);
+        kill_task(tsk);
+        usleep_range(1500000, 2000000);
+        rcu_read_unlock();
       }
     }
-    simple_lmk_kvfree(list_size * sizeof(int), pid_list);
   }
 
   // Reset the collected data
@@ -365,15 +320,12 @@ static void scan_and_kill(void) {
     struct task_struct *vtsk = victim->tsk;
 
     processes[i]->pid = vtsk->pid;
-    processes[i]->mem_data = (get_mm_rss(vtsk->mm) << (PAGE_SHIFT - 10)) / 1024;
-    processes[i]->foreground =
-        ((task_prio(vtsk) == PRIO_APP_FOREGROUND ||
-          task_prio(vtsk) == PRIO_APP_BACKGROUND_NOT_CLOSED) ||
-         vtsk->signal->oom_score_adj <= oom_score_adj);
-    calculate_score(processes[i]);
-    pr_info("%s: comm: %s, mem: %d, foreground: %d, pid: %d, score: %d\n",
-            __func__, vtsk->comm, processes[i]->mem_data,
-            processes[i]->foreground ? 1 : 0, processes[i]->pid,
+    task_unlock(vtsk);
+    processes[i]->score =
+        oom_badness(vtsk, NULL, NULL, totalpages) * 1000 / totalpages;
+    task_lock(vtsk);
+    pr_info("%s: comm: %s, pid: %d, prio: %d, score: %lu\n", __func__,
+            vtsk->comm, processes[i]->pid, task_prio(vtsk),
             processes[i]->score);
     task_unlock(vtsk);
   }
