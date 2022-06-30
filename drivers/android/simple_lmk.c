@@ -225,11 +225,11 @@ static void put_new_foreground(struct task_struct *tsk) {
     }
     index = count;
   }
-  pr_info("%s: Adding pid %d to list\n", __func__, pid_to_add);
+  pr_info("%s: Adding pid %d to list with index %d\n", __func__, pid_to_add, index);
   foreground[index] = pid_to_add;
 }
 
-static bool check_fd_for_ion(struct task_struct *tsk) {
+static bool check_fd_for_mali(struct task_struct *tsk) {
   struct files_struct *current_files;
   struct fdtable *files_table;
   int i = 0;
@@ -276,8 +276,8 @@ static bool check_fd_for_ion(struct task_struct *tsk) {
       i++;
       continue;
     }
-    if (strstr(cwd, "/dev/ion")) {
-      pr_info("%s: [INFO] comm: %s has /dev/ion open as fd %d\n", __func__,
+    if (strstr(cwd, "/dev/mali0")) {
+      pr_info("%s: [INFO] comm: %s has /dev/mali0 open as fd %d\n", __func__,
               tsk->comm, i);
       put_new_foreground(tsk);
       kfree(buf);
@@ -304,7 +304,7 @@ static void scan_and_kill(void) {
       int ppid, k;
 
       task_lock(tsk);
-      is_foreground = check_fd_for_ion(tsk);
+      is_foreground = check_fd_for_mali(tsk);
       for (k = 0; k < MAX_FOREGROUND; k++) {
         if (foreground[k] == tsk->pid) {
           is_foreground = true;
@@ -331,7 +331,7 @@ static void scan_and_kill(void) {
                                               task_active_pid_ns(tsk))
                             : 0;
 
-      if (check_fd_for_ion(rcu_dereference(tsk->real_parent))) {
+      if (check_fd_for_mali(rcu_dereference(tsk->real_parent))) {
         pr_info(
             "%s: [SKIP] comm: %s, pid: %d, found parent comm: %s, pid: %d\n",
             __func__, tsk->comm, tsk->pid,
