@@ -258,10 +258,11 @@ static s64 teo_middle_of_bin(int idx, struct cpuidle_driver *drv)
  * @dev: Target CPU.
  * @state_idx: Index of the capping idle state.
  * @duration_us: Idle duration value to match.
+ * @no_poll: Don't consider polling states.
  */
 static int teo_find_shallower_state(struct cpuidle_driver *drv,
 				    struct cpuidle_device *dev, int state_idx,
-				    s64 duration_us)
+				    s64 duration_us, bool no_poll)
 {
 	int i;
 
@@ -471,7 +472,7 @@ end:
 		 */
 		if (idx > idx0 &&
 		    drv->states[idx].target_residency > delta_tick_us)
-			idx = teo_find_shallower_state(drv, dev, idx, delta_tick_us);
+			idx = teo_find_shallower_state(drv, dev, idx, delta_tick_us, false);
 	}
 
 	return idx;
