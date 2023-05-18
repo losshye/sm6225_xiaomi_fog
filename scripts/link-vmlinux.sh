@@ -94,7 +94,58 @@ modpost_link()
 		info LD ${1}
 	fi
 
-	${LD} ${KBUILD_LDFLAGS} -r -o ${1} ${lds} ${objects}
+	${LDFINAL} ${KBUILD_LDFLAGS} -r -o ${1} ${lds} ${objects}
+}
+
+objtool_link()
+{
+	local objtoolcmd;
+	local objtoolopt;
+
+	if [ "${CONFIG_LTO_CLANG} ${CONFIG_STACK_VALIDATION}" = "y y" ]; then
+		# Don't perform vmlinux validation unless explicitly requested,
+		# but run objtool on vmlinux.o now that we have an object file.
+		if [ -n "${CONFIG_UNWINDER_ORC}" ]; then
+			objtoolcmd="orc generate"
+		fi
+
+		objtoolopt="${objtoolopt} --duplicate"
+
+		if [ -n "${CONFIG_FTRACE_MCOUNT_USE_OBJTOOL}" ]; then
+			objtoolopt="${objtoolopt} --mcount"
+		fi
+	fi
+
+	if [ -n "${CONFIG_VMLINUX_VALIDATION}" ]; then
+		objtoolopt="${objtoolopt} --noinstr"
+		if is_enabled CONFIG_CPU_UNRET_ENTRY; then
+			objtoolopt="${objtoolopt} --unret"
+		fi
+	fi
+
+	if [ -n "${objtoolopt}" ]; then
+		if [ -z "${objtoolcmd}" ]; then
+			objtoolcmd="check"
+		fi
+		objtoolopt="${objtoolopt} --vmlinux"
+		if [ -z "${CONFIG_FRAME_POINTER}" ]; then
+			objtoolopt="${objtoolopt} --no-fp"
+		fi
+		if [ -n "${CONFIG_GCOV_KERNEL}" ] || [ -n "${CONFIG_LTO_CLANG}" ]; then
+			objtoolopt="${objtoolopt} --no-unreachable"
+		fi
+		if [ -n "${CONFIG_RETPOLINE}" ]; then
+			objtoolopt="${objtoolopt} --retpoline"
+		fi
+		if [ -n "${CONFIG_X86_SMAP}" ]; then
+			objtoolopt="${objtoolopt} --uaccess"
+		fi
+		if [ -n "${CONFIG_SLS}" ]; then
+			objtoolopt="${objtoolopt} --sls"
+		fi
+		info OBJTOOL ${1}
+		tools/objtool/objtool ${objtoolcmd} ${objtoolopt} ${1}
+	fi
 }
 
 # Link of vmlinux
@@ -102,37 +153,92 @@ modpost_link()
 # ${2} - output file
 vmlinux_link()
 {
-	local lds="${objtree}/${KBUILD_LDS}"
-	local objects
+	local output=${1}
+	local objs
+	local libs
+	local ld
+	local ldflags
+	local ldlibs
 
-	if [ "${SRCARCH}" != "um" ]; then
-		objects="--whole-archive	\
-			${KBUILD_VMLINUX_OBJS}	\
-			--start-group			\
-			${KBUILD_VMLINUX_LIBS}	\
-			--end-group				\
-			${1}"
+	info LD ${output}
 
-		${LD} ${KBUILD_LDFLAGS} ${LDFLAGS_vmlinux} -o ${2}	\
-			-T ${lds} ${objects}
+	# skip output file argument
+	shift
+
+	if [ -n "${CONFIG_LTO_CLANG}" ]; then
+		# Use vmlinux.o instead of performing the slow LTO link again.
+		objs=vmlinux.o
+		libs=
 	else
-		objects="-Wl,--whole-archive	\
-			${KBUILD_VMLINUX_OBJS}		\
-			-Wl,--no-whole-archive		\
-			-Wl,--start-group			\
-			${KBUILD_VMLINUX_LIBS}		\
-			-Wl,--end-group				\
-			${1}"
-
-		${CC} ${CFLAGS_vmlinux} -o ${2}	\
-			-Wl,-T,${lds}				\
-			${objects}					\
-			-lutil -lrt -lpthread
-		rm -f linux
+		objs="${KBUILD_VMLINUX_OBJS}"
+		libs="${KBUILD_VMLINUX_LIBS}"
 	fi
+
+	if [ "${SRCARCH}" = "um" ]; then
+		wl=-Wl,
+		ld="${CC}"
+		ldflags="${CFLAGS_vmlinux}"
+		ldlibs="-lutil -lrt -lpthread"
+	else
+		wl=
+		ld="${LDFINAL}"
+		ldflags="${KBUILD_LDFLAGS} ${LDFLAGS_vmlinux}"
+		ldlibs=
+	fi
+
+	ldflags="${ldflags} ${wl}--script=${objtree}/${KBUILD_LDS}"
+
+	# The kallsyms linking does not need debug symbols included.
+	if [ "$output" != "${output#.tmp_vmlinux.kallsyms}" ] ; then
+		ldflags="${ldflags} ${wl}--strip-debug"
+	fi
+
+	if [ -n "${CONFIG_VMLINUX_MAP}" ]; then
+		ldflags="${ldflags} ${wl}-Map=${output}.map"
+	fi
+
+	${ld} ${ldflags} -o ${output}					\
+		${wl}--whole-archive ${objs} ${wl}--no-whole-archive	\
+		${wl}--start-group ${libs} ${wl}--end-group		\
+		$@ ${ldlibs}
 }
 
-# Create ${2} .o file with all symbols from the ${1} object file
+# generate .BTF typeinfo from DWARF debuginfo
+# ${1} - vmlinux image
+# ${2} - file to dump raw BTF data into
+gen_btf()
+{
+	local pahole_ver
+
+	if ! [ -x "$(command -v ${PAHOLE})" ]; then
+		echo >&2 "BTF: ${1}: pahole (${PAHOLE}) is not available"
+		return 1
+	fi
+
+	pahole_ver=$(${PAHOLE} --version | sed -E 's/v([0-9]+)\.([0-9]+)/\1\2/')
+	if [ "${pahole_ver}" -lt "116" ]; then
+		echo >&2 "BTF: ${1}: pahole version $(${PAHOLE} --version) is too old, need at least v1.16"
+		return 1
+	fi
+
+	vmlinux_link ${1}
+
+	info "BTF" ${2}
+	LLVM_OBJCOPY="${OBJCOPY}" ${PAHOLE} -J ${PAHOLE_FLAGS} ${1}
+
+	# Create ${2} which contains just .BTF section but no symbols. Add
+	# SHF_ALLOC because .BTF will be part of the vmlinux image. --strip-all
+	# deletes all symbols including __start_BTF and __stop_BTF, which will
+	# be redefined in the linker script. Add 2>/dev/null to suppress GNU
+	# objcopy warnings: "empty loadable segment detected at ..."
+	${OBJCOPY} --only-section=.BTF --set-section-flags .BTF=alloc,readonly \
+		--strip-all ${1} ${2} 2>/dev/null
+	# Change e_type to ET_REL so that it can be used to link final vmlinux.
+	# Unlike GNU ld, lld does not allow an ET_EXEC input.
+	printf '\1' | dd of=${2} conv=notrunc bs=1 seek=16 status=none
+}
+
+# Create ${2} .S file with all symbols from the ${1} object file
 kallsyms()
 {
 	info KSYM ${2}
