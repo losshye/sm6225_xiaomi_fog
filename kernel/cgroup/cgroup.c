@@ -1764,7 +1764,6 @@ int rebind_subsystems(struct cgroup_root *dst_root, u16 ss_mask)
 		ss->root = dst_root;
 
 		spin_lock_irq(&css_set_lock);
-		css->cgroup = dcgrp;
 		WARN_ON(!list_empty(&dcgrp->e_csets[ss->id]));
 		list_for_each_entry_safe(cset, cset_pos, &scgrp->e_csets[ss->id],
 					 e_cset_node[ss->id]) {
