@@ -372,10 +372,10 @@ else
 HOSTCC	= gcc
 HOSTCXX	= g++
 endif
-KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 \
+KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -ggdb \
 		-fomit-frame-pointer -std=gnu89 -pipe -Wdeclaration-after-statement \
 		$(HOST_LFS_CFLAGS) $(HOSTCFLAGS)
-KBUILD_HOSTCXXFLAGS := -Wall -O3 $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
+KBUILD_HOSTCXXFLAGS := -Wall -ggdb -O3 $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
 KBUILD_HOSTLDFLAGS  := $(HOST_LFS_LDFLAGS) $(HOSTLDFLAGS)
 KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 
@@ -419,7 +419,7 @@ CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 NOSTDINC_FLAGS  =
 CFLAGS_MODULE   =
 AFLAGS_MODULE   =
-LDFLAGS_MODULE  = --strip-debug
+LDFLAGS_MODULE  = -03 --strip-debug
 CFLAGS_KERNEL	=
 AFLAGS_KERNEL	=
 LDFLAGS_vmlinux =
@@ -454,8 +454,8 @@ KBUILD_CPPFLAGS := -D__KERNEL__
 # Tell compiler to tune the performance of the code for a specified
 # target processor
 ifeq ($(cc-name),gcc)
-KBUILD_CFLAGS += -mcpu=cortex-a73.cortex-a53 -mtune=cortex-a73.cortex-a53
-KBUILD_AFLAGS += -mcpu=cortex-a73.cortex-a53 -mtune=cortex-a73.cortex-a53
+KBUILD_CFLAGS += -mcpu=cortex-a53+crc -mtune=cortex-a53 -fdata-sections -ffunction-sections -fno-exceptions -fno-rtti -ggdb
+KBUILD_AFLAGS += -mcpu=cortex-a53+crc -mtune=cortex-a53 -fdata-sections -ffunction-sections -fno-exceptions -fno-rtti -ggdb
 else ifeq ($(cc-name),clang)
 KBUILD_CFLAGS += -mcpu=cortex-a73+crypto+crc -mtune=cortex-a73
 KBUILD_AFLAGS += -mcpu=cortex-a73 -mtune=cortex-a73
@@ -468,7 +468,6 @@ KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS_MODULE  := -DMODULE
 KBUILD_CFLAGS_MODULE  := -DMODULE
 KBUILD_LDFLAGS_MODULE := -T $(srctree)/scripts/module-common.lds
-KBUILD_LDFLAGS :=
 GCC_PLUGINS_CFLAGS :=
 CLANG_FLAGS :=
 
@@ -856,17 +855,17 @@ endif
 ifeq ($(cc-name),clang)
 KBUILD_CFLAGS	+= -mllvm -inline-threshold=1
 KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=1
-KBUILD_CFLAGS   += -mllvm -inlinehint-threshold=1
+KBUILD_CFLAGS   += -mllvm -unroll-threshold=1
 else ifeq ($(cc-name),gcc)
-KBUILD_CFLAGS	+= --param max-inline-insns-auto=1000
+KBUILD_CFLAGS	+= --param max-inline-insns-auto=1
 
 # We limit inlining to 5KB on the stack.
 KBUILD_CFLAGS	+= --param large-stack-frame=1288
 
-KBUILD_CFLAGS	+= --param inline-min-speedup=15
+KBUILD_CFLAGS	+= --param inline-min-speedup=5
 KBUILD_CFLAGS	+= --param inline-unit-growth=60
-KBUILD_CFLAGS   += --param=max-inline-insns-single=200 
-KBUILD_CFLAGS   += --param=early-inlining-insns=14
+KBUILD_CFLAGS   += --param=max-inline-insns-single=1
+KBUILD_CFLAGS   += --param=early-inlining-insns=1
 endif
 
 
