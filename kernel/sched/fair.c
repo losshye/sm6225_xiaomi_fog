@@ -9059,7 +9059,9 @@ enum group_type {
 #define LBF_NEED_BREAK	0x02
 #define LBF_DST_PINNED  0x04
 #define LBF_SOME_PINNED	0x08
-#define LBF_ACTIVE_LB	0x10
+#define LBF_NOHZ_STATS	0x10
+#define LBF_NOHZ_AGAIN	0x20
+#define LBF_ACTIVE_LB   0x40
 #define LBF_IGNORE_BIG_TASKS 0x100
 #define LBF_IGNORE_PREFERRED_CLUSTER_TASKS 0x200
 
@@ -9305,10 +9307,12 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 	/*
 	 * Aggressive migration if:
 	 * 1) active balance
-	 * 2) destination numa is preferred
-	 * 3) task is cache cold, or
-	 * 4) too many balance attempts have failed.
+	 * 2) IDLE or NEWLY_IDLE balance.
+	 * 3) destination numa is preferred
+	 * 4) task is cache cold, or
+	 * 5) too many balance attempts have failed.
 	 */
+
 	if (env->flags & LBF_ACTIVE_LB)
 		return 1;
 
