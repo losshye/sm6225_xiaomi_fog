@@ -6,7 +6,6 @@
 
 #include <linux/bitmap.h>
 #include <linux/bitops.h>
-#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/console.h>
 #include <linux/io.h>
@@ -27,6 +26,10 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/dma-mapping.h>
 #include <linux/workqueue.h>
+
+#ifdef CONFIG_DEBUG_FS
+#include <linux/debugfs.h>
+#endif
 
 /* UART specific GENI registers */
 #define SE_UART_LOOPBACK_CFG		(0x22C)
