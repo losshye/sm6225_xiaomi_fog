@@ -1011,8 +1011,10 @@ static void clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se);
  *
  * return true if se need preempt
  */
-static bool update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
+static void update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se, bool tick)
 {
+	struct rq *rq = rq_of(cfs_rq);
+
 	if ((s64)(se->vruntime - se->deadline) < 0)
 		return false;
 
@@ -1031,7 +1033,19 @@ static bool update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	/*
 	 * The task has consumed its request, reschedule.
 	 */
-	return true;
+	if (cfs_rq->nr_running < 2)
+		return;
+
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT_FULL)) {
+		resched_curr(rq);
+	} else {
+		/* Did the task ignore the lazy reschedule request? */
+		if (tick && test_tsk_need_resched_lazy(rq->curr))
+			resched_curr(rq);
+		else
+			resched_curr_lazy(rq);
+	}
+	clear_buddies(cfs_rq, se);
 }
 
 #include "pelt.h"
@@ -1146,7 +1160,7 @@ static void update_tg_load_avg(struct cfs_rq *cfs_rq, int force)
 /*
  * Update the current task's runtime statistics.
  */
-static void update_curr(struct cfs_rq *cfs_rq)
+static void __update_curr(struct cfs_rq *cfs_rq, bool tick)
 {
 	struct sched_entity *curr = cfs_rq->curr;
 	u64 now = rq_clock_task(rq_of(cfs_rq));
@@ -1169,7 +1183,7 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	schedstat_add(cfs_rq->exec_clock, delta_exec);
 
 	curr->vruntime += calc_delta_fair(delta_exec, curr);
-	need_preempt = update_deadline(cfs_rq, curr);
+	update_deadline(cfs_rq, curr, tick);
 	update_min_vruntime(cfs_rq);
 
 	if (entity_is_task(curr)) {
@@ -1184,6 +1198,11 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	}
 
 	account_cfs_rq_runtime(cfs_rq, delta_exec);
+}
+
+static inline void update_curr(struct cfs_rq *cfs_rq)
+{
+	__update_curr(cfs_rq, false);
 }
 
 static void update_curr_fair(struct rq *rq)
@@ -4940,7 +4959,7 @@ entity_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr, int queued)
 	/*
 	 * Update run-time statistics of the 'current'.
 	 */
-	update_curr(cfs_rq);
+	__update_curr(cfs_rq, true);
 
 	/*
 	 * Ensure that runnable average is periodically updated.
