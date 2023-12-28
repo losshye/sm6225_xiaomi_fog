@@ -1423,8 +1423,11 @@ unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t gfp)
 	enum fullness_group newfg;
 	struct zspage *zspage;
 
-	if (unlikely(!size || size > ZS_MAX_ALLOC_SIZE))
-		return 0;
+	if (unlikely(!size))
+		return (unsigned long)ERR_PTR(-EINVAL);
+
+	if (unlikely(size > ZS_MAX_ALLOC_SIZE))
+		return (unsigned long)ERR_PTR(-ENOSPC);
 
 	handle = cache_alloc_handle(pool, gfp);
 	if (!handle)
