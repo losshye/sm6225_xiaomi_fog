@@ -122,6 +122,7 @@ enum {
 
 static int debug_mask;
 
+#ifdef CONFIG_DEBUG_FS
 #define pl_dbg(chip, reason, fmt, ...)				\
 	do {								\
 		if (debug_mask & (reason))				\
@@ -129,6 +130,9 @@ static int debug_mask;
 		else							\
 			pr_debug(fmt, ##__VA_ARGS__);		\
 	} while (0)
+#else
+#define pl_dbg(chip, reason, fmt, ...)	do {} while (0)
+#endif
 
 #define IS_USBIN(mode)	((mode == POWER_SUPPLY_PL_USBIN_USBIN) \
 			|| (mode == POWER_SUPPLY_PL_USBIN_USBIN_EXT))
