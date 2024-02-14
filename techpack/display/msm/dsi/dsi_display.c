@@ -5531,11 +5531,7 @@ static int dsi_display_bind(struct device *dev,
 		goto error;
 	}
 
-	rc = dsi_display_debugfs_init(display);
-	if (rc) {
-		DSI_ERR("[%s] debugfs init failed, rc=%d\n", display->name, rc);
-		goto error;
-	}
+	dsi_display_debugfs_init(display);
 
 #ifdef CONFIG_TARGET_PROJECT_K7T
 	rc = dsi_display_sysfs_init(display);
