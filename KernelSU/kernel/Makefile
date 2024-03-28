@@ -17,13 +17,9 @@ ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-
 obj-$(CONFIG_KSU) += kernelsu.o
 
 # hardcode!
-$(eval KSU_VERSION=11985)
+$(eval KSU_VERSION=11986)
 $(info -- KernelSU version: $(KSU_VERSION))
 ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
-else # If there is no .git file, the default version will be passed.
-$(warning "KSU_GIT_VERSION not defined! It is better to make KernelSU a git submodule!")
-ccflags-y += -DKSU_VERSION=16
-endif
 
 ifeq ($(shell grep -q " current_sid(void)" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
 ccflags-y += -DKSU_COMPAT_HAS_CURRENT_SID
