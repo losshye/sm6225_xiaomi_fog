@@ -419,6 +419,115 @@ util_scan_is_hidden_ssid(struct ie_ssid *ssid)
 }
 
 static QDF_STATUS
+util_scan_update_rnr(struct rnr_bss_info *rnr,
+		     struct neighbor_ap_info_field *ap_info,
+		     uint8_t *data)
+{
+	uint8_t tbtt_info_length;
+
+	tbtt_info_length = ap_info->tbtt_header.tbtt_info_length;
+
+	switch (tbtt_info_length) {
+	case TBTT_NEIGHBOR_AP_OFFSET_ONLY:
+		/* Dont store it skip*/
+		break;
+
+	case TBTT_NEIGHBOR_AP_BSS_PARAM:
+		/* Dont store it skip*/
+		break;
+
+	case TBTT_NEIGHBOR_AP_SHORTSSID:
+		rnr->channel_number = ap_info->channel_number;
+		rnr->operating_class = ap_info->operting_class;
+		qdf_mem_copy(&rnr->short_ssid, &data[1], SHORT_SSID_LEN);
+		break;
+
+	case TBTT_NEIGHBOR_AP_S_SSID_BSS_PARAM:
+		rnr->channel_number = ap_info->channel_number;
+		rnr->operating_class = ap_info->operting_class;
+		qdf_mem_copy(&rnr->short_ssid, &data[1], SHORT_SSID_LEN);
+		rnr->bss_params = data[5];
+		break;
+
+	case TBTT_NEIGHBOR_AP_BSSID:
+		rnr->channel_number = ap_info->channel_number;
+		rnr->operating_class = ap_info->operting_class;
+		qdf_mem_copy(&rnr->bssid, &data[1], QDF_MAC_ADDR_SIZE);
+		break;
+
+	case TBTT_NEIGHBOR_AP_BSSID_BSS_PARAM:
+		rnr->channel_number = ap_info->channel_number;
+		rnr->operating_class = ap_info->operting_class;
+		qdf_mem_copy(&rnr->bssid, &data[1], QDF_MAC_ADDR_SIZE);
+		rnr->bss_params = data[7];
+		break;
+
+	case TBTT_NEIGHBOR_AP_BSSSID_S_SSID:
+		rnr->channel_number = ap_info->channel_number;
+		rnr->operating_class = ap_info->operting_class;
+		qdf_mem_copy(&rnr->bssid, &data[1], QDF_MAC_ADDR_SIZE);
+		qdf_mem_copy(&rnr->short_ssid, &data[7], SHORT_SSID_LEN);
+		break;
+
+	case TBTT_NEIGHBOR_AP_BSSID_S_SSID_BSS_PARAM:
+		rnr->channel_number = ap_info->channel_number;
+		rnr->operating_class = ap_info->operting_class;
+		qdf_mem_copy(&rnr->bssid, &data[1], QDF_MAC_ADDR_SIZE);
+		qdf_mem_copy(&rnr->short_ssid, &data[7], SHORT_SSID_LEN);
+		rnr->bss_params = data[11];
+		break;
+
+	default:
+		scm_debug("Wrong fieldtype");
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
+static QDF_STATUS
+util_scan_parse_rnr_ie(struct scan_cache_entry *scan_entry,
+		       struct ie_header *ie)
+{
+	uint32_t rnr_ie_len;
+	uint16_t tbtt_count, tbtt_length, i, fieldtype;
+	uint8_t *data;
+	struct neighbor_ap_info_field *neighbor_ap_info;
+
+	rnr_ie_len = ie->ie_len;
+	data = (uint8_t *)ie + sizeof(struct ie_header);
+
+	while ((data + sizeof(struct neighbor_ap_info_field)) <=
+					((uint8_t *)ie + rnr_ie_len + 2)) {
+		neighbor_ap_info = (struct neighbor_ap_info_field *)data;
+		tbtt_count = neighbor_ap_info->tbtt_header.tbtt_info_count;
+		tbtt_length = neighbor_ap_info->tbtt_header.tbtt_info_length;
+		fieldtype = neighbor_ap_info->tbtt_header.tbbt_info_fieldtype;
+		scm_debug("channel number %d, op class %d",
+			  neighbor_ap_info->channel_number,
+			  neighbor_ap_info->operting_class);
+		scm_debug("tbtt_count %d, tbtt_length %d, fieldtype %d",
+			  tbtt_count, tbtt_length, fieldtype);
+		data += sizeof(struct neighbor_ap_info_field);
+
+		if (tbtt_count > TBTT_INFO_COUNT)
+			break;
+
+		for (i = 0; i < (tbtt_count + 1) &&
+		     (data + tbtt_length) <=
+				((uint8_t *)ie + rnr_ie_len + 2); i++) {
+			if (i < MAX_RNR_BSS)
+				util_scan_update_rnr(
+					&scan_entry->rnr.bss_info[i],
+					neighbor_ap_info,
+					data);
+			data += tbtt_length;
+		}
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+
+static QDF_STATUS
 util_scan_parse_extn_ie(struct scan_cache_entry *scan_params,
 	struct ie_header *ie)
 {
