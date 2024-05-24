@@ -126,7 +126,14 @@ int __weak arch_asym_cpu_priority(int cpu)
  * (default: ~5%)
  */
 #define capacity_greater(cap1, cap2) ((cap1) * 1024 > (cap2) * 1078)
+
+/*
+ * The margin used when comparing utilization with CPU capacity.
+ *
+ * (default: ~20%)
+ */
 #define fits_capacity(cap, max)	((cap) * 1280 < (max) * 1024)
+
 #endif
 
 #ifdef CONFIG_CFS_BANDWIDTH
@@ -8190,8 +8197,7 @@ static void select_cpu_candidates(struct sched_domain *sd, cpumask_t *cpus,
 			 */
 			util = uclamp_rq_util_with(cpu_rq(cpu), util, p);
 
-			if (cpu_cap * 1024 <
-					util * sched_capacity_margin_up[cpu])
+			if (!fits_capacity(util, cpu_cap))
 				continue;
 
 			/*
