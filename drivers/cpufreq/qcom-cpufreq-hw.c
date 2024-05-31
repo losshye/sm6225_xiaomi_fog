@@ -523,8 +523,6 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 						prev->flags = CPUFREQ_BOOST_FREQ;
 				break;
 			}
-			break;
-		}
 
 		prev_cc = core_count;
 		prev_freq = cur_freq;
@@ -536,6 +534,7 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 			dev_pm_opp_add(cpu_dev, c->table[i].frequency * 1000,
 							volt);
 		}
+}
 
 	c->lut_max_entries = i;
 	c->table[i].frequency = CPUFREQ_TABLE_END;
