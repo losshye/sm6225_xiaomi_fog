@@ -440,7 +440,7 @@ static void qcom_cpufreq_ready(struct cpufreq_policy *policy)
 
 static struct cpufreq_driver cpufreq_qcom_hw_driver = {
 	.flags		= CPUFREQ_STICKY | CPUFREQ_NEED_INITIAL_FREQ_CHECK |
-			  CPUFREQ_HAVE_GOVERNOR_PER_POLICY,
+			   CPUFREQ_HAVE_GOVERNOR_PER_POLICY,
 	.verify		= cpufreq_generic_frequency_table_verify,
 	.target_index	= qcom_cpufreq_hw_target_index,
 	.get		= qcom_cpufreq_hw_get,
@@ -510,7 +510,7 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 			}
 		}
 
-			/*
+		/*
 			 * Two of the same frequencies with the same core counts means
 			 * end of table.
 			 */
@@ -522,7 +522,7 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 					if (prev_freq == CPUFREQ_ENTRY_INVALID)
 						prev->flags = CPUFREQ_BOOST_FREQ;
 				break;
-			}
+					}
 
 		prev_cc = core_count;
 		prev_freq = cur_freq;
@@ -534,7 +534,7 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 			dev_pm_opp_add(cpu_dev, c->table[i].frequency * 1000,
 							volt);
 		}
-}
+	}
 
 	c->lut_max_entries = i;
 	c->table[i].frequency = CPUFREQ_TABLE_END;
@@ -844,13 +844,6 @@ static int qcom_cpufreq_hw_driver_probe(struct platform_device *pdev)
 
 	for_each_possible_cpu(cpu)
 		spin_lock_init(&qcom_cpufreq_counter[cpu].lock);
-
-	rc = cpufreq_register_driver(&cpufreq_qcom_hw_driver);
-	if (rc) {
-		dev_err(&pdev->dev, "CPUFreq HW driver failed to register\n");
-		return rc;
-	}
-
 
 	rc = cpufreq_register_driver(&cpufreq_qcom_hw_driver);
 	if (rc) {
