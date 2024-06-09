@@ -429,6 +429,7 @@ static int __init parse_acpi_topology(void)
 		cpu_topology[cpu].cluster_id = topology_id;
 		topology_id = find_acpi_cpu_topology_package(cpu);
 		cpu_topology[cpu].package_id = topology_id;
+		cpu_topology[cpu].cluster_id = topology_id;
 
 		i = acpi_find_last_cache_level(cpu);
 
