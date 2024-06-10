@@ -732,12 +732,12 @@ static ssize_t store_##file_name					\
 	if (ret != 1)							\
 		return -EINVAL;						\
 									\
-	temp = new_policy.object;					\
-	ret = cpufreq_set_policy(policy, &new_policy);		\
-	if (!ret)							\
-		policy->user_policy.object = temp;			\
+	if (&policy->object == &policy->max)				\
+		if (val < policy->min)					\
+			val = policy->min;				\
 									\
-	return ret ? ret : count;					\
+	ret = freq_qos_update_request(policy->object##_freq_req, val);\
+	return ret >= 0 ? count : ret;					\
 }
 
 store_one(scaling_min_freq, min);
