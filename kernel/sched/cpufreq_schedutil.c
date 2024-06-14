@@ -334,7 +334,15 @@ unsigned long schedutil_cpu_util(int cpu, unsigned long util_cfs,
 	 * to obtain the CPU's actual utilization.
 	 */
 	util = util_cfs + cpu_util_rt(rq);
-	util += cpu_util_dl(rq);
+	if (type == FREQUENCY_UTIL) {
+		util = apply_dvfs_headroom(util, cpu, true);
+#ifdef CONFIG_SCHED_TUNE
+		util += schedtune_cpu_margin_with(util, cpu, p);
+#else
+		util = uclamp_rq_util_with(rq, util, p);
+#endif
+	}
+	dl_util = cpu_util_dl(rq);
 
 	/*
 	 * The maximum hint is a soft bandwidth requirement, which can be lower
@@ -356,7 +364,7 @@ unsigned long schedutil_cpu_util(int cpu, unsigned long util_cfs,
 	 *                max
 	 */
 	util = scale_irq_capacity(util, irq, scale);
-	util += irq;
+	util += type == FREQUENCY_UTIL ? apply_dvfs_headroom(irq, cpu, false) : irq;
 
 	return min(scale, util);
 }
@@ -375,7 +383,10 @@ unsigned long sugov_effective_cpu_perf(int cpu, unsigned long actual,
 	 * Ensure at least minimum performance while providing more compute
 	 * capacity when possible.
 	 */
-	return max(min, max);
+	if (type == FREQUENCY_UTIL)
+		util += apply_dvfs_headroom(cpu_bw_dl(rq), cpu, false);
+
+	return min(max, util);
 }
 
 #ifdef CONFIG_SCHED_WALT
