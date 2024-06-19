@@ -856,9 +856,9 @@ int binder_alloc_mmap_handler(struct binder_alloc *alloc,
 
 	alloc->buffer = vma->vm_start;
 
-	alloc->pages = kcalloc(alloc->buffer_size / PAGE_SIZE,
-			       sizeof(alloc->pages[0]),
-			       GFP_KERNEL);
+	alloc->pages = kvcalloc(alloc->buffer_size / PAGE_SIZE,
+				sizeof(alloc->pages[0]),
+				GFP_KERNEL);
 	if (alloc->pages == NULL) {
 		ret = -ENOMEM;
 		failure_string = "alloc page array";
