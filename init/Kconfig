@@ -1312,6 +1312,7 @@ config UCLAMP_ASSIST
 
 config SPRD_ROTATION_TASK
 	bool "Sprd rotation task"
+	default y
 	depends on SMP
 	help
 	  This option enables task rotation feature. In ARM big.little cpu
