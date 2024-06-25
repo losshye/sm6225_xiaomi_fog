@@ -1532,9 +1532,9 @@ static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 	p->sched_class->enqueue_task(rq, p, flags);
 	walt_update_last_enqueue(p);
 	trace_sched_enq_deq_task(p, 1, cpumask_bits(p->cpus_ptr)[0]);
-	#ifdef CONFIG_SPRD_ROTATION_TASK
-	p->last_enqueue_ts = sched_ktime_clock();
-	#endif
+#ifdef CONFIG_SPRD_ROTATION_TASK
+	p->last_enqueue_ts = sched_ktime_clocks();
+#endif
 }
 
 static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
