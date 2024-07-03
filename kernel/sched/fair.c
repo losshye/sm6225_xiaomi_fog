@@ -8445,7 +8445,6 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 	}
 
 	__cpumask_set_cpu(prev_cpu, candidates);
-	compute_energy_change(p, pd, prev_cpu, candidates, energy);
 	__cpumask_clear_cpu(prev_cpu, candidates);
 
 	if (cpumask_test_cpu(prev_cpu, p->cpus_ptr))
