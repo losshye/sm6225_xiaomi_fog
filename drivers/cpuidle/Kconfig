@@ -23,6 +23,15 @@ config CPU_IDLE_GOV_LADDER
 config CPU_IDLE_GOV_MENU
 	bool "Menu governor (for tickless system)"
 
+config CPU_IDLE_GOV_MOBILE
+	bool "Mobile governor"
+	select IRQ_TIMINGS
+	help
+	  The mobile governor is based on irq timings measurements and
+	  pattern research combined with the next timer. This governor
+	  suits very well on embedded systems where the interrupts are
+	  grouped on a single core and the power is the priority.
+
 config DT_IDLE_STATES
 	bool
 
