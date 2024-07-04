@@ -760,11 +760,24 @@ stackp-flags-$(CONFIG_STACKPROTECTOR_STRONG)      := -fstack-protector-strong
 KBUILD_CFLAGS += $(stackp-flags-y)
 
 ifeq ($(cc-name),clang)
+KBUILD_CFLAGS   += -ffp-contract=fast
+KBUILD_CFLAGS   += -march=armv8.2-a+lse+crypto+dotprod+crc
+KBUILD_CFLAGS += -Wno-format -Wno-misleading-indentation -Wno-uninitialized -Wno-address -Wno-strict-aliasing 
+#Enable MLGO
+ifeq ($(shell test $(CONFIG_CLANG_VERSION) -gt 180000; echo $$?),0)
+KBUILD_CFLAGS   += -mllvm -regalloc-enable-advisor=release
+KBUILD_LDFLAGS  += -mllvm -regalloc-enable-advisor=release
+endif
+# Additional optimizations for better kernel speed
+KBUILD_CFLAGS +=  -fno-semantic-interposition -fno-signed-zeros  -ffinite-math-only -freciprocal-math -fcf-protection=none -fno-trapping-math -fno-math-errno -ffast-math -funroll-loops
 ifdef CONFIG_POLLY_CLANG
 KBUILD_CFLAGS	+= -mllvm -polly \
 		   -mllvm -polly-ast-use-context \
 		   -mllvm -polly-invariant-load-hoisting \
 		   -mllvm -polly-run-inliner \
+		   -mllvm -polly-omp-backend=LLVM \
+		   -mllvm -polly-scheduling=dynamic \
+		   -mllvm -polly-scheduling-chunksize=1 \
 		   -mllvm -polly-vectorizer=stripmine
 ifeq ($(shell test $(CONFIG_CLANG_VERSION) -gt 130000; echo $$?),0)
 KBUILD_CFLAGS	+= -mllvm -polly-loopfusion-greedy=1 \
@@ -781,6 +794,22 @@ ifdef CONFIG_LD_DEAD_CODE_DATA_ELIMINATION
 KBUILD_CFLAGS	+= -mllvm -polly-run-dce
 endif
 endif
+
+ifeq ($(cc-name),clang)
+KBUILD_CFLAGS	+= -mllvm -inline-threshold=1
+KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=1
+KBUILD_CFLAGS   += -mllvm -inlinehint-threshold=1
+else ifeq ($(cc-name),gcc)
+KBUILD_CFLAGS	+= --param max-inline-insns-auto=500
+
+# We limit inlining to 5KB on the stack.
+KBUILD_CFLAGS	+= --param large-stack-frame=1288
+
+KBUILD_CFLAGS	+= --param inline-min-speedup=5
+KBUILD_CFLAGS	+= --param inline-unit-growth=60
+endif
+
+
 ifneq ($(CROSS_COMPILE),)
 CLANG_TRIPLE	?= $(CROSS_COMPILE)
 CLANG_TARGET	:= --target=$(notdir $(CLANG_TRIPLE:%-=%))
@@ -956,7 +985,7 @@ endif
 CC_FLAGS_LTO	+= -fvisibility=hidden -fwhole-program-vtables
 
 # Limit inlining across translation units to reduce binary size
-KBUILD_LDFLAGS += -mllvm -import-instr-limit=65
+KBUILD_LDFLAGS += -mllvm -import-instr-limit=1
 
 endif
 
