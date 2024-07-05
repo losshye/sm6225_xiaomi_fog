@@ -761,7 +761,10 @@ KBUILD_CFLAGS += $(stackp-flags-y)
 
 ifeq ($(cc-name),clang)
 KBUILD_CFLAGS   += -ffp-contract=fast
-KBUILD_CFLAGS   += -march=armv8.2-a+lse+crypto+dotprod+crc
+KBUILD_CFLAGS   += -mllvm -hot-cold-split=true
+KBUILD_CFLAGS   += -O3 -march=armv8.2-a+lse+crypto+crc+dotprod -fno-stack-protector -fcf-protection=none -mcpu=cortex-a73+crc+crypto -mtune=cortex-a73 -funroll-loops -ffast-math --cuda-path=/dev/null
+KBUILD_CFLAGS   += -fvectorize -fslp-vectorize -finline-functions -fmerge-all-constants
+KBUILD_AFLAGS   += -O3 -march=armv8.2-a+lse+crypto+crc+dotprod
 KBUILD_CFLAGS += -Wno-format -Wno-misleading-indentation -Wno-uninitialized -Wno-address -Wno-strict-aliasing 
 #Enable MLGO
 ifeq ($(shell test $(CONFIG_CLANG_VERSION) -gt 180000; echo $$?),0)
