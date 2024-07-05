@@ -4674,7 +4674,7 @@ static void __sched notrace __schedule(bool preempt)
 			 * Only call wake up if prev isn't blocked on a sleeping
 			 * spin lock.
 			 */
-			if (prev->flags & PF_WQ_WORKER && !prev->saved_state) {
+			if (prev->flags & PF_WQ_WORKER) {
 				struct task_struct *to_wakeup;
 
 				to_wakeup = wq_worker_sleeping(prev);
