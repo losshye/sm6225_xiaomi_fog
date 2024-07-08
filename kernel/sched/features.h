@@ -1,27 +1,30 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
-#define SCHED_FEAT_ENFORCE_ELIGIBILITY 0
+#define SCHED_FEAT_ENFORCE_ELIGIBILITY 1
 /*
  * Using the avg_vruntime, do the right thing and preserve lag across
  * sleep+wake cycles. EEVDF placement strategy #1, #2 if disabled.
  */
-#define SCHED_FEAT_PLACE_LAG 0
+#define SCHED_FEAT_PLACE_LAG 1
 /*
  * Give new tasks half a slice to ease into the competition.
  */
-#define SCHED_FEAT_PLACE_DEADLINE_INITIAL 0
+#define SCHED_FEAT_PLACE_DEADLINE_INITIAL 1
+/*
+ * Preserve relative virtual deadline on 'migration'.
+ */
+#define SCHED_FEAT_PLACE_REL_DEADLINE 1
 /*
  * Inhibit (wakeup) preemption until the current task has either matched the
  * 0-lag point or until is has exhausted it's slice.
  */
-#define SCHED_FEAT_RUN_TO_PARITY 0
-
+#define SCHED_FEAT_RUN_TO_PARITY 1
 /*
  * Prefer to schedule the task we woke last (assuming it failed
  * wakeup-preemption), since its likely going to consume data we
  * touched, increases cache locality.
  */
-#define SCHED_FEAT_NEXT_BUDDY 1
+#define SCHED_FEAT_NEXT_BUDDY 0
 
 /*
  * Consider buddies to be cache hot, decreases the likeliness of a
@@ -41,7 +44,7 @@
 /*
  * Decrement CPU capacity based on time not spent running tasks
  */
-#define SCHED_FEAT_NONTASK_CAPACITY 0
+#define SCHED_FEAT_NONTASK_CAPACITY 1
 
 /*
  * Queue remote wakeups on the target CPU and process them
