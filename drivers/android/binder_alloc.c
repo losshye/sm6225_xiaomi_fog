@@ -867,8 +867,8 @@ int binder_alloc_mmap_handler(struct binder_alloc *alloc,
 	alloc->buffer = (void __user *)vma->vm_start;
 
 	alloc->pages = kvcalloc(alloc->buffer_size / PAGE_SIZE,
-				sizeof(alloc->pages[0]),
-				GFP_KERNEL);
+			       sizeof(alloc->pages[0]),
+			       GFP_KERNEL);
 	if (alloc->pages == NULL) {
 		ret = -ENOMEM;
 		failure_string = "alloc page array";
@@ -971,7 +971,7 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 		}
 	}
 	binder_alloc_unlock(alloc);
-	kfree(alloc->pages);
+	kvfree(alloc->pages);
 	if (alloc->vma_vm_mm)
 		mmdrop(alloc->vma_vm_mm);
 
