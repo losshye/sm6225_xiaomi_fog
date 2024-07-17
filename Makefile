@@ -725,6 +725,7 @@ KBUILD_CFLAGS 	+= $(call cc-disable-warning, format-invalid-specifier)
 KBUILD_CFLAGS 	+= $(call cc-disable-warning, gnu)
 KBUILD_CFLAGS 	+= $(call cc-disable-warning, duplicate-decl-specifier)
 KBUILD_CFLAGS   += $(call cc-disable-warning, attributes)
+KBUILD_CFLAGS 	+= $(call cc-disable-warning, array-compare)
 
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS   += -Os
