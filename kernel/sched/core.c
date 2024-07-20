@@ -4283,8 +4283,7 @@ void scheduler_tick(void)
 
 #ifdef CONFIG_SPRD_ROTATION_TASK
 	if (curr->sched_class == &fair_sched_class) {
-		if (rq->misfit_task_load && curr->state == TASK_RUNNING &&
-		    cpumask_test_cpu(cpu, &min_cap_cpu_mask)) {
+	if (rq->misfit_task_load && curr->state == TASK_RUNNING) {
 			raw_spin_lock(&rotation_lock);
 			check_for_task_rotation(rq);
 			raw_spin_unlock(&rotation_lock);

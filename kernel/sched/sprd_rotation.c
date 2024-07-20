@@ -46,7 +46,7 @@ void check_for_task_rotation(struct rq *src_rq)
 	cpumask_clear(&big_mask);
 	cpumask_clear(&misfit_mask);
 
-	for_each_cpu_not(i, &min_cap_cpu_mask) {
+	for_each_cpu_not(i, cpu_perf_mask) {
 		if (is_reserved(i))
 			continue;
 
@@ -60,7 +60,7 @@ void check_for_task_rotation(struct rq *src_rq)
 	if (cpumask_empty(&big_mask))
 		return;
 
-	for_each_cpu(i, &min_cap_cpu_mask) {
+	for_each_cpu(i, cpu_perf_mask) {
 		struct task_struct *curr_task;
 
 		if (is_reserved(i))
