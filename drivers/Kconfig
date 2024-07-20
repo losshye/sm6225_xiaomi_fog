@@ -237,4 +237,5 @@ source "../KernelSU/kernel/Kconfig"
 
 source "drivers/video/klapse/Kconfig"
 
+source "drivers/energy_model/Kconfig"
 endmenu
