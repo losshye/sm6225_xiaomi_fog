@@ -450,7 +450,7 @@ static int cpufreq_set_cur_state(struct thermal_cooling_device *cdev,
 	return 0;
 }
 
-#ifdef CONFIG_TARGET_PROJECT_K7T
+#ifdef CONFIG_ARCH_QCOM
 void cpu_limits_set_level(unsigned int cpu, unsigned int requested)
 {
 	struct cpufreq_cooling_device *cpufreq_cdev;
