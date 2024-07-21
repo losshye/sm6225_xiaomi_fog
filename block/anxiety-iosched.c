@@ -15,6 +15,9 @@
 /* Batch this many synchronous requests at a time */
 #define	DEFAULT_SYNC_RATIO	(4)
 
+/* Run each batch this many times*/
+#define DEFAULT_BATCH_COUNT	(4)
+
 enum {
 	SYNC,
 	ASYNC
@@ -26,6 +29,7 @@ struct anxiety_data {
 
 	/* Tunables */
 	uint8_t sync_ratio;
+	uint8_t batch_count;
 };
 
 static inline bool anxiety_can_dispatch(struct anxiety_data *adata)
@@ -159,6 +163,7 @@ static int anxiety_init_queue(struct request_queue *q,
 	INIT_LIST_HEAD(&adata->queue[ASYNC]);
 	adata->contig_syncs = 0;
 	adata->sync_ratio = DEFAULT_SYNC_RATIO;
+	adata->batch_count = DEFAULT_BATCH_COUNT;
 
 	/* Set elevator to Anxiety */
 	spin_lock_irq(q->queue_lock);
