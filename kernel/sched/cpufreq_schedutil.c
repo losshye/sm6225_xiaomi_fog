@@ -173,7 +173,7 @@ static void sugov_fast_switch(struct sugov_policy *sg_policy, u64 time,
 			      unsigned int next_freq)
 {
 	struct cpufreq_policy *policy = sg_policy->policy;
-	unsigned int cpu;
+	unsigned int cpu __maybe_unused;
 
 	if (!sugov_update_next_freq(sg_policy, time, next_freq))
 		return;
