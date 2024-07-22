@@ -6192,7 +6192,7 @@ static const struct of_device_id bengal_asoc_machine_of_match[]  = {
 
 static int msm_snd_card_bengal_late_probe(struct snd_soc_card *card)
 {
-	struct snd_soc_component *component;
+	struct snd_soc_component *component = NULL;
 	struct platform_device *pdev = NULL;
 	char *data = NULL;
 	int ret = 0, i = 0;
