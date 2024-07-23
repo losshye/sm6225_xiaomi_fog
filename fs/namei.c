@@ -4091,7 +4091,7 @@ EXPORT_SYMBOL(vfs_rmdir);
 long do_rmdir(int dfd, const char __user *pathname)
 {
 	int error = 0;
-	struct filename *name;
+	struct filename *name = NULL;
 	struct dentry *dentry;
 	struct path path;
 	struct qstr last;
