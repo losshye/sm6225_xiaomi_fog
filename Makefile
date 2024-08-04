@@ -774,11 +774,6 @@ KBUILD_CFLAGS   += -O3 -march=armv8.2-a+lse+crypto+crc+dotprod+rcpc+fp16 -fno-st
 KBUILD_CFLAGS   += -fvectorize -fslp-vectorize -finline-functions -fmerge-all-constants
 KBUILD_AFLAGS   += -O3 -march=armv8.2-a+lse+crypto+crc+dotprod+rcpc+fp16
 KBUILD_CFLAGS += -Wno-format -Wno-misleading-indentation -Wno-uninitialized -Wno-address -Wno-strict-aliasing 
-#Enable MLGO
-ifeq ($(shell test $(CONFIG_CLANG_VERSION) -gt 180000; echo $$?),0)
-KBUILD_CFLAGS   += -mllvm -regalloc-enable-advisor=release
-KBUILD_AFLAGS  += -mllvm -regalloc-enable-advisor=release
-endif
 # Additional optimizations for better kernel speed
 KBUILD_CFLAGS +=  -fno-semantic-interposition -fno-signed-zeros  -ffinite-math-only -freciprocal-math -fcf-protection=none -fno-trapping-math -fno-math-errno -ffast-math -funroll-loops
 ifdef CONFIG_POLLY_CLANG
@@ -807,9 +802,9 @@ endif
 endif
 
 ifeq ($(cc-name),clang)
-KBUILD_CFLAGS	+= -mllvm -inline-threshold=100
-KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=100
-KBUILD_CFLAGS   += -mllvm -inlinehint-threshold=100
+KBUILD_CFLAGS	+= -mllvm -inline-threshold=1
+KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=1
+KBUILD_CFLAGS   += -mllvm -inlinehint-threshold=1
 else ifeq ($(cc-name),gcc)
 KBUILD_CFLAGS	+= --param max-inline-insns-auto=500
 
@@ -994,7 +989,7 @@ endif
 CC_FLAGS_LTO	+= -fvisibility=hidden -fwhole-program-vtables
 
 # Limit inlining across translation units to reduce binary size
-KBUILD_LDFLAGS += -mllvm -import-instr-limit=100
+KBUILD_LDFLAGS += -mllvm -import-instr-limit=1
 
 endif
 
