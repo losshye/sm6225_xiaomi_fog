@@ -12,7 +12,9 @@
 #include <linux/stddef.h>
 #include <linux/types.h>
 #include <linux/uidgid.h>
-
+#include <uapi/linux/android/binderfs.h>
+#include "binder_alloc.h"
+#include "dbitmap.h"
 struct binder_context {
 	struct binder_node *binder_context_mgr_node;
 	struct mutex context_mgr_node_lock;
