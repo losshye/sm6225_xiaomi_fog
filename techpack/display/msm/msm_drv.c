@@ -825,7 +825,6 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 						ddev->primary->debugfs_root);
 		sde_dbg_debugfs_register(dev);
 	}
-#endif
 
 	/* perform subdriver post initialization */
 	if (kms && kms->funcs && kms->funcs->postinit) {
