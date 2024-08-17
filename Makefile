@@ -802,11 +802,7 @@ KBUILD_CFLAGS   += -O3 -march=armv8.2-a+lse+crypto+crc+dotprod -fno-stack-protec
 KBUILD_CFLAGS   += -fvectorize -fslp-vectorize -finline-functions -fmerge-all-constants
 KBUILD_AFLAGS   += -O3 -march=armv8.2-a+lse+crypto+crc+dotprod
 KBUILD_CFLAGS += -Wno-format -Wno-misleading-indentation -Wno-uninitialized -Wno-address -Wno-strict-aliasing 
-#Enable MLGO
-ifeq ($(shell test $(CONFIG_CLANG_VERSION) -gt 180000; echo $$?),0)
-KBUILD_CFLAGS   += -mllvm -regalloc-enable-advisor=release
-KBUILD_AFLAGS  += -mllvm -regalloc-enable-advisor=release
-endif
+
 # Additional optimizations for better kernel speed
 KBUILD_CFLAGS +=  -fno-semantic-interposition -fno-signed-zeros  -ffinite-math-only -freciprocal-math -fcf-protection=none -fno-trapping-math -fno-math-errno -ffast-math -funroll-loops
 ifdef CONFIG_POLLY_CLANG

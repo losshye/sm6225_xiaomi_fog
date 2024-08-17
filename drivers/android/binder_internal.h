@@ -50,10 +50,6 @@ struct binderfs_mount_opts {
 	int stats_mode;
 };
 
-struct binder_proc {
-	struct dbitmap dmap;
-};
-
 /**
  * binderfs_info - information about a binderfs mount
  * @ipc_ns:         The ipc namespace the binderfs mount belongs to.

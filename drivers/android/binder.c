@@ -549,6 +549,7 @@ struct binder_proc {
 	bool sync_recv;
 	bool async_recv;
 	wait_queue_head_t freeze_wait;
+	struct dbitmap dmap;
 
 	struct list_head todo;
 	struct binder_stats stats;
