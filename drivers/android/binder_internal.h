@@ -15,7 +15,7 @@
 #include <uapi/linux/android/binderfs.h>
 #include "binder_alloc.h"
 #include "dbitmap.h"
-struct dbitmap dmap;
+
 struct binder_context {
 	struct binder_node *binder_context_mgr_node;
 	struct mutex context_mgr_node_lock;
@@ -48,6 +48,10 @@ struct binder_device {
 struct binderfs_mount_opts {
 	int max;
 	int stats_mode;
+};
+
+struct binder_proc {
+	struct dbitmap dmap;
 };
 
 /**
