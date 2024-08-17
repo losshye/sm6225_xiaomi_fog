@@ -80,6 +80,7 @@
 #include <asm/cacheflush.h>
 
 #include "binder_alloc.h"
+#include "dbitmap.h"
 #include "binder_internal.h"
 #include "binder_trace.h"
 
@@ -549,8 +550,7 @@ struct binder_proc {
 	bool sync_recv;
 	bool async_recv;
 	wait_queue_head_t freeze_wait;
-	struct dbitmap dmap;
-
+    struct dbitmap dmap;
 	struct list_head todo;
 	struct binder_stats stats;
 	struct list_head delivered_death;
@@ -4933,7 +4933,7 @@ static void binder_free_proc(struct binder_proc *proc)
 	put_task_struct(proc->tsk);
 	put_cred(proc->cred);
 	binder_stats_deleted(BINDER_STAT_PROC);
-	kfree(eproc);
+	kfree(proc);
 	dbitmap_free(&proc->dmap);
 }
 
