@@ -83,6 +83,11 @@ static struct workqueue_struct *thermal_passive_wq;
  * the thermal core and by the thermal governor code.
  */
 
+int get_sconfig(void) 
+{ 
+    return atomic_read(&switch_mode); 
+}
+
 static struct thermal_governor *__find_governor(const char *name)
 {
 	struct thermal_governor *pos;
