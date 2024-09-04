@@ -8853,6 +8853,13 @@ static int ufshcd_quirk_tune_host_pa_tactivate(struct ufs_hba *hba)
 					  new_peer_pa_tactivate);
 	}
 
+	if (pa_hibern8time_quirk_enabled) {
+		// Synclength G4 for SAMSUNG ufs
+		ret = ufshcd_dme_peer_set(hba, UIC_ARG_MIB(0x15D0), 0x4F);
+		// Synclength G1 for SANDISK ufs
+		ret = ufshcd_dme_peer_set(hba, UIC_ARG_MIB(0x1552), 0x4F);
+	}
+
 out:
 	return ret;
 }
