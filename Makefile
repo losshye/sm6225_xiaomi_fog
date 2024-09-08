@@ -882,7 +882,7 @@ KBUILD_CFLAGS += $(call cc-disable-warning, unused-const-variable)
 KBUILD_CFLAGS += $(call cc-disable-warning, dangling-pointer)
 
 ifdef CONFIG_LD_IS_LLD
-KBUILD_LDFLAGS += -O2
+KBUILD_LDFLAGS += -O3
 endif
 
 ifdef CONFIG_FRAME_POINTER
