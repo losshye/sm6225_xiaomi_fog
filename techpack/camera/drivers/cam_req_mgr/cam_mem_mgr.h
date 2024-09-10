@@ -46,6 +46,8 @@ enum cam_smmu_mapping_client {
  * @krefcount:      Reference counter to track whether the buffer is
  *                  mapped and in use
  * @smmu_mapping_client: Client buffer (User or kernel)
+ * @urefcount:      Reference counter to track whether the buffer is
+ *                  mapped and in use by umd
  */
 struct cam_mem_buf_queue {
 	struct dma_buf *dma_buf;
@@ -63,6 +65,7 @@ struct cam_mem_buf_queue {
 	bool is_imported;
 	struct kref krefcount;
 	enum cam_smmu_mapping_client smmu_mapping_client;
+	struct kref urefcount;
 };
 
 /**

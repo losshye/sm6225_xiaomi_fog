@@ -197,6 +197,8 @@ static void cam_mem_put_slot(int32_t idx)
 	mutex_lock(&tbl.m_lock);
 	mutex_lock(&tbl.bufq[idx].q_lock);
 	tbl.bufq[idx].active = false;
+	kref_init(&tbl.bufq[idx].krefcount);
+	kref_init(&tbl.bufq[idx].urefcount);
 	mutex_unlock(&tbl.bufq[idx].q_lock);
 	mutex_destroy(&tbl.bufq[idx].q_lock);
 	clear_bit(idx, tbl.bitmap);
@@ -950,6 +952,8 @@ static int cam_mem_mgr_cleanup_table(void)
 		tbl.bufq[i].num_hdl = 0;
 		tbl.bufq[i].dma_buf = NULL;
 		tbl.bufq[i].active = false;
+		kref_init(&tbl.bufq[i].krefcount);
+		kref_init(&tbl.bufq[i].urefcount);
 		mutex_unlock(&tbl.bufq[i].q_lock);
 		mutex_destroy(&tbl.bufq[i].q_lock);
 	}
@@ -1062,6 +1066,20 @@ static void cam_mem_util_unmap(struct kref *kref)
 
 }
 
+static void cam_mem_util_unmap_wrapper(struct kref *kref)
+{
+	int32_t idx;
+	struct cam_mem_buf_queue *bufq = container_of(kref, typeof(*bufq), krefcount);
+
+	idx = CAM_MEM_MGR_GET_HDL_IDX(bufq->buf_handle);
+	if (idx >= CAM_MEM_BUFQ_MAX || idx <= 0) {
+		CAM_ERR(CAM_MEM, "idx: %d not valid", idx);
+		return;
+	}
+
+	cam_mem_util_unmap(idx);
+}
+
 void cam_mem_put_cpu_buf(int32_t buf_handle)
 {
 	int rc = 0;
@@ -1091,11 +1109,23 @@ void cam_mem_put_cpu_buf(int32_t buf_handle)
 		return;
 	}
 
-	if (kref_put(&tbl.bufq[idx].krefcount, cam_mem_util_unmap))
-		CAM_DBG(CAM_MEM,
-			"Called unmap from here, buf_handle: %u, idx: %d",
-			buf_handle, idx);
+	kref_put(&tbl.bufq[idx].krefcount, cam_mem_util_unmap_dummy);
 
+	krefcount = kref_read(&tbl.bufq[idx].krefcount);
+	urefcount = kref_read(&tbl.bufq[idx].urefcount);
+
+	if ((krefcount == 1) && (urefcount == 0))
+		unmap = true;
+
+	if (unmap) {
+		cam_mem_util_unmap(idx);
+		CAM_DBG(CAM_MEM,
+			"Called unmap from here, buf_handle: %u, idx: %d", buf_handle, idx);
+	} else if (krefcount == 0) {
+		CAM_ERR(CAM_MEM,
+			"Unbalanced release Called buf_handle: %u, idx: %d",
+			tbl.bufq[idx].buf_handle, idx);
+	}
 }
 EXPORT_SYMBOL(cam_mem_put_cpu_buf);
 
@@ -1136,10 +1166,24 @@ int cam_mem_mgr_release(struct cam_mem_mgr_release_cmd *cmd)
 
 	CAM_DBG(CAM_MEM, "Releasing hdl = %x, idx = %d", cmd->buf_handle, idx);
 
-	if (kref_put(&tbl.bufq[idx].krefcount, cam_mem_util_unmap))
+	kref_put(&tbl.bufq[idx].urefcount, cam_mem_util_unmap_dummy);
+
+	urefcount = kref_read(&tbl.bufq[idx].urefcount);
+
+	if (tbl.bufq[idx].flags & CAM_MEM_FLAG_KMD_ACCESS) {
+		krefcount = kref_read(&tbl.bufq[idx].krefcount);
+		if ((krefcount == 1) && (urefcount == 0))
+			unmap = true;
+	} else {
+		if (urefcount == 0)
+			unmap = true;
+	}
+
+	if (unmap) {
+		cam_mem_util_unmap(idx);
 		CAM_DBG(CAM_MEM,
-			"Called unmap from here, buf_handle: %u, idx: %d",
-			cmd->buf_handle, idx);
+			"Called unmap from here, buf_handle: %u, idx: %d", cmd->buf_handle, idx);
+	}
 
 	return rc;
 }
