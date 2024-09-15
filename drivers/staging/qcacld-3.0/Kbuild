@@ -2956,6 +2956,7 @@ cppflags-$(CONFIG_HIF_CPU_PERF_AFFINE_MASK) += -DHIF_CPU_PERF_AFFINE_MASK
 KBUILD_CPPFLAGS += $(cppflags-y)
 
 ccflags-y += -Wmissing-prototypes
+ccflags-y += -g0
 
 ifeq ($(call cc-option-yn, -Wheader-guard), y)
 ccflags-y += -Wheader-guard
