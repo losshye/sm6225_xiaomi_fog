@@ -756,10 +756,15 @@ KBUILD_CFLAGS 	+= $(call cc-disable-warning, duplicate-decl-specifier)
 KBUILD_CFLAGS   += $(call cc-disable-warning, attributes)
 KBUILD_CFLAGS 	+= $(call cc-disable-warning, array-compare)
 
-ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
-KBUILD_CFLAGS   += -Os
-else
-KBUILD_CFLAGS   += -O3
+ifdef CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE
+KBUILD_CFLAGS += -O2
+KBUILD_RUSTFLAGS += -Copt-level=2
+else ifdef CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
+KBUILD_CFLAGS += -O3
+KBUILD_RUSTFLAGS += -Copt-level=3
+else ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
+KBUILD_CFLAGS += -Os
+KBUILD_RUSTFLAGS += -Copt-level=s
 endif
 
 # Tell compiler to tune the performance of the code for a specified
