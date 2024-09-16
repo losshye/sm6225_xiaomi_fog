@@ -835,13 +835,15 @@ KBUILD_CFLAGS	+= -mllvm -inline-threshold=1
 KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=1
 KBUILD_CFLAGS   += -mllvm -inlinehint-threshold=1
 else ifeq ($(cc-name),gcc)
-KBUILD_CFLAGS	+= --param max-inline-insns-auto=500
+KBUILD_CFLAGS	+= --param max-inline-insns-auto=1000
 
 # We limit inlining to 5KB on the stack.
 KBUILD_CFLAGS	+= --param large-stack-frame=1288
 
-KBUILD_CFLAGS	+= --param inline-min-speedup=5
+KBUILD_CFLAGS	+= --param inline-min-speedup=15
 KBUILD_CFLAGS	+= --param inline-unit-growth=60
+KBUILD_CFLAGS   += --param=max-inline-insns-single=200 
+KBUILD_CFLAGS   += --param=early-inlining-insns=14
 endif
 
 
@@ -882,7 +884,7 @@ KBUILD_CFLAGS += $(call cc-disable-warning, unused-const-variable)
 KBUILD_CFLAGS += $(call cc-disable-warning, dangling-pointer)
 
 ifdef CONFIG_LD_IS_LLD
-KBUILD_LDFLAGS += -O2
+KBUILD_LDFLAGS += -O3 --strip-debug
 endif
 
 ifdef CONFIG_FRAME_POINTER
