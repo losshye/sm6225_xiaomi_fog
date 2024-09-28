@@ -1,13 +1,6 @@
-/* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s:%s " fmt, KBUILD_MODNAME, __func__
@@ -28,6 +21,7 @@
 #include <linux/cpu_cooling.h>
 #include <linux/atomic.h>
 #include <linux/regulator/consumer.h>
+#include <linux/cpufreq.h>
 
 #include <asm/smp_plat.h>
 #include <asm/cacheflush.h>
@@ -143,7 +137,7 @@ static void limits_dcvs_get_freq_limits(struct limits_dcvs_hw *hw)
 
 static unsigned long limits_mitigation_notify(struct limits_dcvs_hw *hw)
 {
-	uint32_t val = 0;
+	uint32_t val = 0, max_cpu_ct = 0, max_cpu_limit = 0, idx = 0, cpu = 0;
 	struct device *cpu_dev = NULL;
 	unsigned long freq_val, max_limit = 0;
 	struct dev_pm_opp *opp_entry;
@@ -187,11 +181,9 @@ static unsigned long limits_mitigation_notify(struct limits_dcvs_hw *hw)
 		max_limit = FREQ_HZ_TO_KHZ(freq_val);
 		break;
 	}
-	rcu_read_unlock();
-	max_limit = FREQ_HZ_TO_KHZ(freq_val);
 
-	sched_update_cpu_freq_min_max(&hw->core_map, 0, max_limit);
-
+	if (max_cpu_ct == cpumask_weight(&hw->core_map))
+		max_limit = max_cpu_limit;
 	pr_debug("CPU:%d max limit:%lu\n", cpumask_first(&hw->core_map),
 			max_limit);
 	trace_lmh_dcvs_freq(cpumask_first(&hw->core_map), max_limit);
