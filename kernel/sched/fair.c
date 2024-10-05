@@ -7699,11 +7699,8 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 				if (best_idle_cpu != -1)
 					continue;
 
-				/*
-				 * Skip searching for active CPU for tasks have
-				 * prefer_high_cap.
-				 */
-				if (schedtune_prefer_high_cap(p))
+				if (best_prioritized_candidate) {
+					best_prioritized_cpu = i;
 					continue;
 				}
 
