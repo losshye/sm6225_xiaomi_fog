@@ -415,66 +415,6 @@ err:
 #ifndef CONFIG_NUMA
 static void sysstats_fill_zoneinfo(struct sys_memstats *stats)
 {
-	pg_data_t *pgdat;
-	struct zone *zone;
-	struct zone *node_zones;
-	unsigned long zspages = 0;
-
-	pgdat = NODE_DATA(0);
-	node_zones = pgdat->node_zones;
-
-	for (zone = node_zones; zone - node_zones < MAX_NR_ZONES; ++zone) {
-		if (!populated_zone(zone))
-			continue;
-
-		zspages += zone_page_state(zone, NR_ZSPAGES);
-		if (!strcmp(zone->name, "DMA")) {
-			stats->dma_nr_free_pages =
-				K(zone_page_state(zone, NR_FREE_PAGES));
-			stats->dma_nr_active_anon =
-				K(zone_page_state(zone, NR_ZONE_ACTIVE_ANON));
-			stats->dma_nr_inactive_anon =
-				K(zone_page_state(zone, NR_ZONE_INACTIVE_ANON));
-			stats->dma_nr_active_file =
-				K(zone_page_state(zone, NR_ZONE_ACTIVE_FILE));
-			stats->dma_nr_inactive_file =
-				K(zone_page_state(zone, NR_ZONE_INACTIVE_FILE));
-		} else if (!strcmp(zone->name, "Normal")) {
-			stats->normal_nr_free_pages =
-				K(zone_page_state(zone, NR_FREE_PAGES));
-			stats->normal_nr_active_anon =
-				K(zone_page_state(zone, NR_ZONE_ACTIVE_ANON));
-			stats->normal_nr_inactive_anon =
-				K(zone_page_state(zone, NR_ZONE_INACTIVE_ANON));
-			stats->normal_nr_active_file =
-				K(zone_page_state(zone, NR_ZONE_ACTIVE_FILE));
-			stats->normal_nr_inactive_file =
-				K(zone_page_state(zone, NR_ZONE_INACTIVE_FILE));
-		} else if (!strcmp(zone->name, "HighMem")) {
-			stats->highmem_nr_free_pages =
-				K(zone_page_state(zone, NR_FREE_PAGES));
-			stats->highmem_nr_active_anon =
-				K(zone_page_state(zone, NR_ZONE_ACTIVE_ANON));
-			stats->highmem_nr_inactive_anon =
-				K(zone_page_state(zone, NR_ZONE_INACTIVE_ANON));
-			stats->highmem_nr_active_file =
-				K(zone_page_state(zone, NR_ZONE_ACTIVE_FILE));
-			stats->highmem_nr_inactive_file =
-				K(zone_page_state(zone, NR_ZONE_INACTIVE_FILE));
-		} else if (!strcmp(zone->name, "Movable")) {
-			stats->movable_nr_free_pages =
-				K(zone_page_state(zone, NR_FREE_PAGES));
-			stats->movable_nr_active_anon =
-				K(zone_page_state(zone, NR_ZONE_ACTIVE_ANON));
-			stats->movable_nr_inactive_anon =
-				K(zone_page_state(zone, NR_ZONE_INACTIVE_ANON));
-			stats->movable_nr_active_file =
-				K(zone_page_state(zone, NR_ZONE_ACTIVE_FILE));
-			stats->movable_nr_inactive_file =
-				K(zone_page_state(zone, NR_ZONE_INACTIVE_FILE));
-		}
-	}
-	stats->zram_compressed = K(zspages);
 }
 #elif
 static void sysstats_fill_zoneinfo(struct sys_memstats *stats)
