@@ -358,6 +358,13 @@ static bool build_perf_domains(const struct cpumask *cpu_map)
 		goto free;
 	}
 
+	/* EAS definitely does *not* handle SMT */
+	if (sched_smt_active()) {
+		pr_warn("rd %*pbl: Disabling EAS, SMT is not supported\n",
+			cpumask_pr_args(cpu_map));
+		goto free;
+	}
+
 	for_each_cpu(i, cpu_map) {
 		/* Skip already covered CPUs. */
 		if (find_pd(pd, i))
@@ -1148,12 +1155,17 @@ build_sched_groups(struct sched_domain *sd, int cpu)
 void init_sched_groups_capacity(int cpu, struct sched_domain *sd)
 {
 	struct sched_group *sg = sd->groups;
+	cpumask_t avail_mask;
+
 	WARN_ON(!sg);
 
 	do {
 		int cpu, max_cpu = -1;
 
-		sg->group_weight = cpumask_weight(sched_group_span(sg));
+		cpumask_andnot(&avail_mask, sched_group_span(sg),
+							cpu_isolated_mask);
+		sg->group_weight = cpumask_weight(&avail_mask);
+
 		if (!(sd->flags & SD_ASYM_PACKING))
 			goto next;
 
@@ -1998,8 +2010,44 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 	/* Attach the domains */
 	rcu_read_lock();
 	for_each_cpu(i, cpu_map) {
+		int max_cpu = READ_ONCE(d.rd->max_cap_orig_cpu);
+		int min_cpu = READ_ONCE(d.rd->min_cap_orig_cpu);
+
 		sd = *per_cpu_ptr(d.sd, i);
+
+		if ((max_cpu < 0) || (arch_scale_cpu_capacity(i) >
+				arch_scale_cpu_capacity(max_cpu)))
+			WRITE_ONCE(d.rd->max_cap_orig_cpu, i);
+
+		if ((min_cpu < 0) || (arch_scale_cpu_capacity(i) <
+				arch_scale_cpu_capacity(min_cpu)))
+			WRITE_ONCE(d.rd->min_cap_orig_cpu, i);
+
 		cpu_attach_domain(sd, d.rd, i);
+	}
+
+	/* set the mid capacity cpu (assumes only 3 capacities) */
+	for_each_cpu(i, cpu_map) {
+		int max_cpu = READ_ONCE(d.rd->max_cap_orig_cpu);
+		int min_cpu = READ_ONCE(d.rd->min_cap_orig_cpu);
+
+		if ((arch_scale_cpu_capacity(i)
+				!=  arch_scale_cpu_capacity(min_cpu)) &&
+				(arch_scale_cpu_capacity(i)
+				!=  arch_scale_cpu_capacity(max_cpu))) {
+			WRITE_ONCE(d.rd->mid_cap_orig_cpu, i);
+			break;
+		}
+	}
+
+	/*
+	 * The max_cpu_capacity reflect the original capacity which does not
+	 * change dynamically. So update the max cap CPU and its capacity
+	 * here.
+	 */
+	if (d.rd->max_cap_orig_cpu != -1) {
+		d.rd->max_cpu_capacity.cpu = d.rd->max_cap_orig_cpu;
+		d.rd->max_cpu_capacity.val = arch_scale_cpu_capacity(d.rd->max_cap_orig_cpu);
 	}
 
 	rcu_read_unlock();
