@@ -10289,108 +10289,44 @@ static bool update_sd_pick_busiest(struct lb_env *env,
 	if (sgs->group_type < busiest->group_type)
 		return false;
 
-	/*
-	 * The candidate and the current busiest group are the same type of
-	 * group. Let check which one is the busiest according to the type.
-	 */
-
-	switch (sgs->group_type) {
-	case group_overloaded:
-		/* Select the overloaded group with highest avg_load. */
-		if (sgs->avg_load <= busiest->avg_load)
-			return false;
-		break;
-
-	case group_imbalanced:
-		/*
-		 * Select the 1st imbalanced group as we don't have any way to
-		 * choose one more than another.
-		 */
+	if (sgs->avg_load <= busiest->avg_load)
 		return false;
 
-	case group_asym_packing:
+	if (!(env->sd->flags & SD_ASYM_CPUCAPACITY))
+		goto asym_packing;
+
+	/*
+	 * If we have more than one misfit sg go with the biggest misfit.
+	 */
+	if (sgs->group_type == group_misfit_task &&
+	    sgs->group_misfit_task_load < busiest->group_misfit_task_load)
+		return false;
+
+asym_packing:
+	/* This is the busiest node in its class. */
+	if (!(env->sd->flags & SD_ASYM_PACKING))
+		return true;
+
+	/* No ASYM_PACKING if target CPU is already busy */
+	if (env->idle == CPU_NOT_IDLE)
+		return true;
+	/*
+	 * ASYM_PACKING needs to move all the work to the highest
+	 * prority CPUs in the group, therefore mark all groups
+	 * of lower priority than ourself as busy.
+	 */
+	if (sgs->sum_nr_running &&
+	    sched_asym_prefer(env->dst_cpu, sg->asym_prefer_cpu)) {
+		if (!sds->busiest)
+			return true;
+
 		/* Prefer to move from lowest priority CPU's work */
-		if (sched_asym_prefer(sg->asym_prefer_cpu, sds->busiest->asym_prefer_cpu))
-			return false;
-		break;
-
-	case group_misfit_task:
-		/*
-		 * If we have more than one misfit sg go with the biggest
-		 * misfit.
-		 */
-		if (sgs->group_misfit_task_load < busiest->group_misfit_task_load)
-			return false;
-		break;
-
-	case group_smt_balance:
-		/*
-		 * Check if we have spare CPUs on either SMT group to
-		 * choose has spare or fully busy handling.
-		 */
-		if (sgs->idle_cpus != 0 || busiest->idle_cpus != 0)
-			goto has_spare;
-
-		/* fallthrough */
-
-	case group_fully_busy:
-		/*
-		 * Select the fully busy group with highest avg_load. In
-		 * theory, there is no need to pull task from such kind of
-		 * group because tasks have all compute capacity that they need
-		 * but we can still improve the overall throughput by reducing
-		 * contention when accessing shared HW resources.
-		 *
-		 * XXX for now avg_load is not computed and always 0 so we
-		 * select the 1st one, except if @sg is composed of SMT
-		 * siblings.
-		 */
-
-		if (sgs->avg_load < busiest->avg_load)
-			return false;
-
-		if (sgs->avg_load == busiest->avg_load) {
-			/*
-			 * SMT sched groups need more help than non-SMT groups.
-			 * If @sg happens to also be SMT, either choice is good.
-			 */
-			if (sds->busiest->flags & SD_SHARE_CPUCAPACITY)
-				return false;
-		}
-
-		break;
-
-	case group_has_spare:
-		/*
-		 * Do not pick sg with SMT CPUs over sg with pure CPUs,
-		 * as we do not want to pull task off SMT core with one task
-		 * and make the core idle.
-		 */
-		if (smt_vs_nonsmt_groups(sds->busiest, sg)) {
-			if (sg->flags & SD_SHARE_CPUCAPACITY && sgs->sum_h_nr_running <= 1)
-				return false;
-			else
-				return true;
-		}
-has_spare:
-
-		/*
-		 * Select not overloaded group with lowest number of idle cpus
-		 * and highest number of running tasks. We could also compare
-		 * the spare capacity which is more stable but it can end up
-		 * that the group has less spare capacity but finally more idle
-		 * CPUs which means less opportunity to pull tasks.
-		 */
-		if (sgs->idle_cpus > busiest->idle_cpus)
-			return false;
-		else if ((sgs->idle_cpus == busiest->idle_cpus) &&
-			 (sgs->sum_nr_running <= busiest->sum_nr_running))
-			return false;
-
-		break;
+		if (sched_asym_prefer(sds->busiest->asym_prefer_cpu,
+				      sg->asym_prefer_cpu))
+			return true;
 	}
 
-	return true;
+	return false;
 }
 
 #ifdef CONFIG_NUMA_BALANCING
