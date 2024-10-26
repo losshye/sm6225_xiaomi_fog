@@ -101,99 +101,45 @@ modpost_link()
 # ${2} - output file
 vmlinux_link()
 {
-	local output=${1}
-	local objs
-	local libs
-	local ld
-	local ldflags
-	local ldlibs
+	local lds="${objtree}/${KBUILD_LDS}"
+	local objects
 
-	info LD ${output}
+	if [ "${SRCARCH}" != "um" ]; then
+		if [ -n "${CONFIG_LTO_GCC}" ]; then
+			# Use vmlinux.o instead of performing the slow LTO
+			# link again.
+			objects="--whole-archive	\
+				vmlinux.o 				\
+				${1}"
+		else
+			objects="--whole-archive	\
+				${KBUILD_VMLINUX_OBJS}	\
+				--no-whole-archive		\
+				--start-group			\
+				${KBUILD_VMLINUX_LIBS}	\
+				--end-group
+				${1}"
+		fi
 
-	# skip output file argument
-	shift
-
-	if is_enabled CONFIG_LTO_CLANG || is_enabled CONFIG_X86_KERNEL_IBT || \
-	   is_enabled CONFIG_LTO_GCC; then
-		# Use vmlinux.o instead of performing the slow LTO link again.
-		objs=vmlinux.o
-		libs=
+		${LDFINAL} ${KBUILD_LDFLAGS} ${LDFLAGS_vmlinux} -o ${2}	\
+			-T ${lds} ${objects}
 	else
-		objs=vmlinux.a
-		libs="${KBUILD_VMLINUX_LIBS}"
+		objects="-Wl,--whole-archive	\
+			${KBUILD_VMLINUX_OBJS}		\
+			-Wl,--start-group			\
+			${KBUILD_VMLINUX_LIBS}		\
+			-Wl,--end-group				\
+			${1}"
+
+		${CC} ${CFLAGS_vmlinux} -o ${2}	\
+			-Wl,-T,${lds}				\
+			${objects}					\
+			-lutil -lrt -lpthread
+		rm -f linux
 	fi
-
-	if is_enabled CONFIG_MODULES; then
-		objs="${objs} .vmlinux.export.o"
-	fi
-
-	objs="${objs} init/version-timestamp.o"
-
-	if [ "${SRCARCH}" = "um" ]; then
-		wl=-Wl,
-		ld="${CC}"
-		ldflags="${CFLAGS_vmlinux}"
-		ldlibs="-lutil -lrt -lpthread"
-	else
-		wl=
-		ld="${LDFINAL}"
-		ldflags="${KBUILD_LDFLAGS} ${LDFLAGS_vmlinux}"
-		ldlibs=
-	fi
-
-	ldflags="${ldflags} ${wl}--script=${objtree}/${KBUILD_LDS}"
-
-	# The kallsyms linking does not need debug symbols included.
-	if [ "$output" != "${output#.tmp_vmlinux.kallsyms}" ] ; then
-		ldflags="${ldflags} ${wl}--strip-debug"
-	fi
-
-	if is_enabled CONFIG_VMLINUX_MAP; then
-		ldflags="${ldflags} ${wl}-Map=${output}.map"
-	fi
-
-	${ld} ${ldflags} -o ${output}					\
-		${wl}--whole-archive ${objs} ${wl}--no-whole-archive	\
-		${wl}--start-group ${libs} ${wl}--end-group		\
-		$@ ${ldlibs}
 }
 
-# generate .BTF typeinfo from DWARF debuginfo
-# ${1} - vmlinux image
-# ${2} - file to dump raw BTF data into
-gen_btf()
-{
-	local pahole_ver
-
-	if ! [ -x "$(command -v ${PAHOLE})" ]; then
-		echo >&2 "BTF: ${1}: pahole (${PAHOLE}) is not available"
-		return 1
-	fi
-
-	pahole_ver=$(${PAHOLE} --version | sed -E 's/v([0-9]+)\.([0-9]+)/\1\2/')
-	if [ "${pahole_ver}" -lt "116" ]; then
-		echo >&2 "BTF: ${1}: pahole version $(${PAHOLE} --version) is too old, need at least v1.16"
-		return 1
-	fi
-
-	vmlinux_link ${1}
-
-	info "BTF" ${2}
-	LLVM_OBJCOPY="${OBJCOPY}" ${PAHOLE} -J ${PAHOLE_FLAGS} ${1}
-
-	# Create ${2} which contains just .BTF section but no symbols. Add
-	# SHF_ALLOC because .BTF will be part of the vmlinux image. --strip-all
-	# deletes all symbols including __start_BTF and __stop_BTF, which will
-	# be redefined in the linker script. Add 2>/dev/null to suppress GNU
-	# objcopy warnings: "empty loadable segment detected at ..."
-	${OBJCOPY} --only-section=.BTF --set-section-flags .BTF=alloc,readonly \
-		--strip-all ${1} ${2} 2>/dev/null
-	# Change e_type to ET_REL so that it can be used to link final vmlinux.
-	# Unlike GNU ld, lld does not allow an ET_EXEC input.
-	printf '\1' | dd of=${2} conv=notrunc bs=1 seek=16 status=none
-}
-
-# Create ${2} .S file with all symbols from the ${1} object file
+# Create ${2} .o file with all symbols from the ${1} object file
 kallsyms()
 {
 	info KSYM ${2}
