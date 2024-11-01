@@ -3447,7 +3447,7 @@ void reweight_task(struct task_struct *p, const struct load_weight *lw)
 	struct cfs_rq *cfs_rq = cfs_rq_of(se);
 	struct load_weight *load = &se->load;
 
-	reweight_entity(cfs_rq, se, lw->weight);
+	reweight_entity(cfs_rq, se, lw->weight, lw->weight);
 	load->inv_weight = lw->inv_weight;
 }
 
