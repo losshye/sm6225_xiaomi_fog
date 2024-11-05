@@ -7084,8 +7084,6 @@ int do_isolation_work_cpu_stop(void *data)
 
 	irq_migrate_all_off_this_cpu();
 
-	sched_ttwu_pending();
-
 	/* Update our root-domain */
 	rq_lock(rq, &rf);
 
