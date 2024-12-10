@@ -11,7 +11,6 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import me.weishu.kernelsu.ui.util.listModules
-import me.weishu.kernelsu.ui.util.overlayFsAvailable
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.Collator
@@ -36,6 +35,7 @@ class ModuleViewModel : ViewModel() {
         val remove: Boolean,
         val updateJson: String,
         val hasWebUi: Boolean,
+        val hasActionScript: Boolean,
     )
 
     data class ModuleUpdateInfo(
@@ -46,9 +46,6 @@ class ModuleViewModel : ViewModel() {
     )
 
     var isRefreshing by mutableStateOf(false)
-        private set
-
-    var isOverlayAvailable by mutableStateOf(overlayFsAvailable())
         private set
 
     val moduleList by derivedStateOf {
@@ -74,8 +71,6 @@ class ModuleViewModel : ViewModel() {
             val start = SystemClock.elapsedRealtime()
 
             kotlin.runCatching {
-                isOverlayAvailable = overlayFsAvailable()
-
                 val result = listModules()
 
                 Log.i(TAG, "result: $result")
@@ -87,7 +82,6 @@ class ModuleViewModel : ViewModel() {
                     .map { obj ->
                         ModuleInfo(
                             obj.getString("id"),
-
                             obj.optString("name"),
                             obj.optString("author", "Unknown"),
                             obj.optString("version", "Unknown"),
@@ -97,7 +91,8 @@ class ModuleViewModel : ViewModel() {
                             obj.getBoolean("update"),
                             obj.getBoolean("remove"),
                             obj.optString("updateJson"),
-                            obj.optBoolean("web")
+                            obj.optBoolean("web"),
+                            obj.optBoolean("action")
                         )
                     }.toList()
                 isNeedRefresh = false
