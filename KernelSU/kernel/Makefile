@@ -16,10 +16,18 @@ ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-
 
 obj-$(CONFIG_KSU) += kernelsu.o
 
-# hardcode!
-$(eval KSU_VERSION=11985)
+# .git is a text file while the module is imported by 'git submodule add'.
+ifeq ($(shell test -e $(srctree)/$(src)/../.git; echo $$?),0)
+$(shell cd $(srctree)/$(src); /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin [ -f ../.git/shallow ] && git fetch --unshallow)
+KSU_GIT_VERSION := $(shell cd $(srctree)/$(src); /usr/bin/env PATH="$$PATH":/usr/bin:/usr/local/bin git rev-list --count HEAD)
+# ksu_version: major * 10000 + git version + 200 for historical reasons
+$(eval KSU_VERSION=$(shell expr 10000 + $(KSU_GIT_VERSION) + 165))
 $(info -- KernelSU version: $(KSU_VERSION))
 ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
+else # If there is no .git file, the default version will be passed.
+$(warning "KSU_GIT_VERSION not defined! It is better to make KernelSU a git submodule!")
+ccflags-y += -DKSU_VERSION=16
+endif
 
 ifeq ($(shell grep -q " current_sid(void)" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
 ccflags-y += -DKSU_COMPAT_HAS_CURRENT_SID
@@ -50,9 +58,6 @@ ccflags-y += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
 
 ifeq ($(shell grep -q "int path_umount" $(srctree)/fs/namespace.c; echo $$?),0)
 ccflags-y += -DKSU_UMOUNT
-else
-$(info -- Did you know you can backport path_umount to fs/namespace.c from 5.9?)
-$(info -- Read: https://kernelsu.org/guide/how-to-integrate-for-non-gki.html#how-to-backport-path-umount)
 endif
 
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat
@@ -68,29 +73,41 @@ endif
 ifdef KSU_SUSFS_SUS_MOUNT
 ccflags-y += -DKSU_SUSFS_SUS_MOUNT
 endif
-ifdef KSU_SUSFS_SUS_MOUNT_MNT_ID_REORDER
-ccflags-y += -DKSU_SUSFS_SUS_MOUNT_MNT_ID_REORDER
+ifdef KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT
+ccflags-y += -DKSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT
+endif
+ifdef KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT
+ccflags-y += -DKSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT
 endif
 ifdef KSU_SUSFS_SUS_KSTAT
 ccflags-y += -DKSU_SUSFS_SUS_KSTAT
 endif
-ifdef KSU_SUSFS_SUS_MAPS
-ccflags-y += -DKSU_SUSFS_SUS_MAPS
-endif
-ifdef KSU_SUSFS_SUS_PROC_FD_LINK
-ccflags-y += -DKSU_SUSFS_SUS_PROC_FD_LINK
-endif
-ifdef KSU_SUSFS_SUS_MEMFD
-ccflags-y += -DKSU_SUSFS_SUS_MEMFD
+ifdef KSU_SUSFS_SUS_OVERLAYFS
+ccflags-y += -DKSU_SUSFS_SUS_OVERLAYFS
 endif
 ifdef KSU_SUSFS_TRY_UMOUNT
 ccflags-y += -DKSU_SUSFS_TRY_UMOUNT
+endif
+ifdef KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT
+ccflags-y += -DKSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT
 endif
 ifdef KSU_SUSFS_SPOOF_UNAME
 ccflags-y += -DKSU_SUSFS_SPOOF_UNAME
 endif
 ifdef KSU_SUSFS_ENABLE_LOG
 ccflags-y += -DKSU_SUSFS_ENABLE_LOG
+endif
+ifdef KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+ccflags-y += -DKSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+endif
+ifdef KSU_SUSFS_SPOOF_PROC_CMDLINE
+ccflags-y += -DKSU_SUSFS_SPOOF_PROC_CMDLINE
+endif
+ifdef KSU_SUSFS_OPEN_REDIRECT
+ccflags-y += -DKSU_SUSFS_OPEN_REDIRECT
+endif
+ifdef KSU_SUSFS_SUS_SU
+ccflags-y += -DKSU_SUSFS_SUS_SU
 endif
 else
 $(info -- You have not integrate susfs in your kernel.)
