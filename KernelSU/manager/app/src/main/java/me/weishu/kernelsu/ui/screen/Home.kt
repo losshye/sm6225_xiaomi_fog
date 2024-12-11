@@ -22,54 +22,42 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.content.pm.PackageInfoCompat
 import com.ramcosta.composedestinations.annotation.Destination
-import com.ramcosta.composedestinations.annotation.RootGraph
-import com.ramcosta.composedestinations.generated.destinations.InstallScreenDestination
-import com.ramcosta.composedestinations.generated.destinations.SettingScreenDestination
+import com.ramcosta.composedestinations.annotation.RootNavGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.weishu.kernelsu.*
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.ui.component.rememberConfirmDialog
+import me.weishu.kernelsu.ui.screen.destinations.InstallScreenDestination
+import me.weishu.kernelsu.ui.screen.destinations.SettingScreenDestination
 import me.weishu.kernelsu.ui.util.*
 import me.weishu.kernelsu.ui.util.module.LatestVersionInfo
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Destination<RootGraph>(start = true)
+@RootNavGraph(start = true)
+@Destination
 @Composable
 fun HomeScreen(navigator: DestinationsNavigator) {
     val kernelVersion = getKernelVersion()
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
-    Scaffold(
-        topBar = {
-            TopBar(
-                kernelVersion,
-                onSettingsClick = {
-                    navigator.navigate(SettingScreenDestination)
-                },
-                onInstallClick = {
-                    navigator.navigate(InstallScreenDestination)
-                },
-                scrollBehavior = scrollBehavior
-            )
-        },
-        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
-    ) { innerPadding ->
+    Scaffold(topBar = {
+        TopBar(kernelVersion, onSettingsClick = {
+            navigator.navigate(SettingScreenDestination)
+        }, onInstallClick = {
+            navigator.navigate(InstallScreenDestination)
+        })
+    }) { innerPadding ->
         Column(
             modifier = Modifier
                 .padding(innerPadding)
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             val isManager = Natives.becomeManager(ksuApp.packageName)
@@ -96,7 +84,12 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     stringResource(id = R.string.grant_root_failed)
                 )
             }
-            Unofficial()
+            val checkUpdate =
+                LocalContext.current.getSharedPreferences("settings", Context.MODE_PRIVATE)
+                    .getBoolean("check_update", true)
+            if (checkUpdate) {
+                UpdateCard()
+            }
             InfoCard()
             DonateCard()
             LearnMoreCard()
@@ -110,10 +103,11 @@ fun UpdateCard() {
     val context = LocalContext.current
     val latestVersionInfo = LatestVersionInfo()
     val newVersion by produceState(initialValue = latestVersionInfo) {
-        value = withContext(Dispatchers.IO) {
+        value = withContext(Dispatchers.IO){
             checkNewVersion()
         }
     }
+
 
     val currentVersionCode = getManagerVersion(context).second
     val newVersionCode = newVersion.versionCode
@@ -134,9 +128,7 @@ fun UpdateCard() {
             message = stringResource(id = R.string.new_version_available).format(newVersionCode),
             MaterialTheme.colorScheme.outlineVariant
         ) {
-            if (changelog.isEmpty()) {
-                uriHandler.openUri(newVersionUrl)
-            } else {
+            if (changelog.isNotEmpty()) {
                 updateDialog.showConfirm(
                     title = title,
                     content = changelog,
@@ -162,58 +154,52 @@ fun RebootDropdownItem(@StringRes id: Int, reason: String = "") {
 private fun TopBar(
     kernelVersion: KernelVersion,
     onInstallClick: () -> Unit,
-    onSettingsClick: () -> Unit,
-    scrollBehavior: TopAppBarScrollBehavior? = null
+    onSettingsClick: () -> Unit
 ) {
-    TopAppBar(
-        title = { Text(stringResource(R.string.app_name)) },
-        actions = {
-            if (kernelVersion.isGKI()) {
-                IconButton(onClick = onInstallClick) {
-                    Icon(
-                        imageVector = Icons.Filled.Archive,
-                        contentDescription = stringResource(id = R.string.install)
-                    )
-                }
+    TopAppBar(title = { Text(stringResource(R.string.app_name)) }, actions = {
+        if (kernelVersion.isGKI()) {
+            IconButton(onClick = onInstallClick) {
+                Icon(
+                    imageVector = Icons.Filled.Archive,
+                    contentDescription = stringResource(id = R.string.install)
+                )
             }
+        }
 
-            var showDropdown by remember { mutableStateOf(false) }
-            IconButton(onClick = {
-                showDropdown = true
+        var showDropdown by remember { mutableStateOf(false) }
+        IconButton(onClick = {
+            showDropdown = true
+        }) {
+            Icon(
+                imageVector = Icons.Filled.Refresh,
+                contentDescription = stringResource(id = R.string.reboot)
+            )
+
+            DropdownMenu(expanded = showDropdown, onDismissRequest = {
+                showDropdown = false
             }) {
-                Icon(
-                    imageVector = Icons.Filled.Refresh,
-                    contentDescription = stringResource(id = R.string.reboot)
-                )
 
-                DropdownMenu(expanded = showDropdown, onDismissRequest = {
-                    showDropdown = false
-                }) {
+                RebootDropdownItem(id = R.string.reboot)
 
-                    RebootDropdownItem(id = R.string.reboot)
-
-                    val pm = LocalContext.current.getSystemService(Context.POWER_SERVICE) as PowerManager?
-                    @Suppress("DEPRECATION")
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && pm?.isRebootingUserspaceSupported == true) {
-                        RebootDropdownItem(id = R.string.reboot_userspace, reason = "userspace")
-                    }
-                    RebootDropdownItem(id = R.string.reboot_recovery, reason = "recovery")
-                    RebootDropdownItem(id = R.string.reboot_bootloader, reason = "bootloader")
-                    RebootDropdownItem(id = R.string.reboot_download, reason = "download")
-                    RebootDropdownItem(id = R.string.reboot_edl, reason = "edl")
+                val pm =
+                    LocalContext.current.getSystemService(Context.POWER_SERVICE) as PowerManager?
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && pm?.isRebootingUserspaceSupported == true) {
+                    RebootDropdownItem(id = R.string.reboot_userspace, reason = "userspace")
                 }
+                RebootDropdownItem(id = R.string.reboot_recovery, reason = "recovery")
+                RebootDropdownItem(id = R.string.reboot_bootloader, reason = "bootloader")
+                RebootDropdownItem(id = R.string.reboot_download, reason = "download")
+                RebootDropdownItem(id = R.string.reboot_edl, reason = "edl")
             }
+        }
 
-            IconButton(onClick = onSettingsClick) {
-                Icon(
-                    imageVector = Icons.Filled.Settings,
-                    contentDescription = stringResource(id = R.string.settings)
-                )
-            }
-        },
-        windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
-        scrollBehavior = scrollBehavior
-    )
+        IconButton(onClick = onSettingsClick) {
+            Icon(
+                imageVector = Icons.Filled.Settings,
+                contentDescription = stringResource(id = R.string.settings)
+            )
+        }
+    })
 }
 
 @Composable
@@ -278,16 +264,31 @@ private fun StatusCard(
                     }
                 }
 
-                else -> {
-                    Icon(Icons.Outlined.Block, stringResource(R.string.home_failure))
+                kernelVersion.isGKI() -> {
+                    Icon(Icons.Outlined.Warning, stringResource(R.string.home_not_installed))
                     Column(Modifier.padding(start = 20.dp)) {
                         Text(
-                            text = stringResource(R.string.home_failure),
+                            text = stringResource(R.string.home_not_installed),
                             style = MaterialTheme.typography.titleMedium
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = stringResource(R.string.home_failure_reason),
+                            text = stringResource(R.string.home_click_to_install),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+
+                else -> {
+                    Icon(Icons.Outlined.Block, stringResource(R.string.home_unsupported))
+                    Column(Modifier.padding(start = 20.dp)) {
+                        Text(
+                            text = stringResource(R.string.home_unsupported),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.home_unsupported_reason),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -400,7 +401,7 @@ private fun InfoCard() {
             val managerVersion = getManagerVersion(context)
             InfoCardItem(
                 stringResource(R.string.home_manager_version),
-                "${managerVersion.first}-magic 🪄 (${managerVersion.second})"
+                "${managerVersion.first} (${managerVersion.second})"
             )
 
             Spacer(Modifier.height(16.dp))
@@ -412,38 +413,9 @@ private fun InfoCard() {
     }
 }
 
-@Composable
-fun Unofficial() {
-    val uriHandler = LocalUriHandler.current
-    val url = stringResource(R.string.home_unofficial_kernelsu_announce)
-
-    ElevatedCard {
-
-        Row(modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                uriHandler.openUri(url)
-            }
-            .padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text(
-                    text = stringResource(R.string.home_unofficial_kernelsu),
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.home_unofficial_kernelsu_body),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
-    }
-}
-
-fun getManagerVersion(context: Context): Pair<String, Long> {
-    val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)!!
-    val versionCode = PackageInfoCompat.getLongVersionCode(packageInfo)
-    return Pair(packageInfo.versionName!!, versionCode)
+fun getManagerVersion(context: Context): Pair<String, Int> {
+    val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+    return Pair(packageInfo.versionName, packageInfo.versionCode)
 }
 
 @Preview

@@ -37,12 +37,9 @@ declare function fullScreen(isFullScreen: boolean);
 
 declare function toast(message: string);
 
-declare function moduleInfo(): string;
-
 export {
     exec,
     spawn,
     fullScreen,
-    toast,
-    moduleInfo
+    toast
 }

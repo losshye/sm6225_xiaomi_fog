@@ -4,15 +4,16 @@ import android.content.ContentResolver
 import android.content.Context
 import android.database.Cursor
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.Parcelable
 import android.os.SystemClock
 import android.provider.OpenableColumns
-import android.system.Os
 import android.util.Log
 import com.topjohnwu.superuser.CallbackList
 import com.topjohnwu.superuser.Shell
 import com.topjohnwu.superuser.ShellUtils
+import com.topjohnwu.superuser.io.SuFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
@@ -51,10 +52,10 @@ inline fun <T> withNewRootShell(
     return createRootShell(globalMnt).use(block)
 }
 
-fun Uri.getFileName(context: Context): String? {
+fun getFileNameFromUri(context: Context, uri: Uri): String? {
     var fileName: String? = null
     val contentResolver: ContentResolver = context.contentResolver
-    val cursor: Cursor? = contentResolver.query(this, null, null, null, null)
+    val cursor: Cursor? = contentResolver.query(uri, null, null, null, null)
     cursor?.use {
         if (it.moveToFirst()) {
             fileName = it.getString(it.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
@@ -188,30 +189,6 @@ fun flashModule(
     }
 }
 
-fun runModuleAction(
-    moduleId: String, onStdout: (String) -> Unit, onStderr: (String) -> Unit
-): Boolean {
-    val shell = getRootShell()
-
-    val stdoutCallback: CallbackList<String?> = object : CallbackList<String?>() {
-        override fun onAddElement(s: String?) {
-            onStdout(s ?: "")
-        }
-    }
-
-    val stderrCallback: CallbackList<String?> = object : CallbackList<String?>() {
-        override fun onAddElement(s: String?) {
-            onStderr(s ?: "")
-        }
-    }
-
-    val result = shell.newJob().add("${getKsuDaemonPath()} module action $moduleId")
-        .to(stdoutCallback, stderrCallback).exec()
-    Log.i("KernelSU", "Module runAction result: $result")
-
-    return result.isSuccess
-}
-
 fun restoreBoot(
     onFinish: (Boolean, Int) -> Unit, onStdout: (String) -> Unit, onStderr: (String) -> Unit
 ): Boolean {
@@ -335,7 +312,18 @@ fun isAbDevice(): Boolean {
 }
 
 fun isInitBoot(): Boolean {
-    return !Os.uname().release.contains("android12-")
+    val shell = getRootShell()
+    if (shell.isRoot) {
+        // if we have root, use /dev/block/by-name/init_boot to check
+        val abDevice = isAbDevice()
+        val initBootBlock = "/dev/block/by-name/init_boot${if (abDevice) "_a" else ""}"
+        val file = SuFile(initBootBlock)
+        file.shell = shell
+        return file.exists()
+    }
+    // https://source.android.com/docs/core/architecture/partitions/generic-boot
+    return ShellUtils.fastCmd(shell, "getprop ro.product.first_api_level").trim()
+        .toInt() >= Build.VERSION_CODES.TIRAMISU
 }
 
 suspend fun getCurrentKmi(): String = withContext(Dispatchers.IO) {
@@ -349,6 +337,12 @@ suspend fun getSupportedKmis(): List<String> = withContext(Dispatchers.IO) {
     val cmd = "boot-info supported-kmi"
     val out = shell.newJob().add("${getKsuDaemonPath()} $cmd").to(ArrayList(), null).exec().out
     out.filter { it.isNotBlank() }.map { it.trim() }
+}
+
+fun overlayFsAvailable(): Boolean {
+    val shell = getRootShell()
+    // check /proc/filesystems
+    return ShellUtils.fastCmdResult(shell, "cat /proc/filesystems | grep overlay")
 }
 
 fun hasMagisk(): Boolean {

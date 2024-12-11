@@ -1,10 +1,11 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package me.weishu.kernelsu.ui.component.profile
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
@@ -19,14 +20,12 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -87,7 +86,7 @@ fun RootProfileConfig(
             ) {
                 OutlinedTextField(
                     modifier = Modifier
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        .menuAnchor()
                         .fillMaxWidth(),
                     readOnly = true,
                     label = { Text(stringResource(R.string.profile_namespace)) },
@@ -185,7 +184,7 @@ fun RootProfileConfig(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun GroupsPanel(selected: List<Groups>, closeSelection: (selection: Set<Groups>) -> Unit) {
     val selectGroupsDialog = rememberCustomDialog { dismiss: () -> Unit ->
@@ -235,20 +234,14 @@ fun GroupsPanel(selected: List<Groups>, closeSelection: (selection: Set<Groups>)
         )
     }
 
-    OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
+    OutlinedCard(modifier = Modifier
+        .fillMaxWidth()
+        .padding(16.dp)
+        .clickable {
+            selectGroupsDialog.show()
+        }) {
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable {
-                    selectGroupsDialog.show()
-                }
-                .padding(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(stringResource(R.string.profile_groups))
             FlowRow {
                 selected.forEach { group ->
@@ -263,7 +256,7 @@ fun GroupsPanel(selected: List<Groups>, closeSelection: (selection: Set<Groups>)
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CapsPanel(
     selected: Collection<Capabilities>,
@@ -306,20 +299,14 @@ fun CapsPanel(
         )
     }
 
-    OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
+    OutlinedCard(modifier = Modifier
+        .fillMaxWidth()
+        .padding(16.dp)
+        .clickable {
+            selectCapabilitiesDialog.show()
+        }) {
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable {
-                    selectCapabilitiesDialog.show()
-                }
-                .padding(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(stringResource(R.string.profile_capabilities))
             FlowRow {
                 selected.forEach { group ->
@@ -342,10 +329,10 @@ private fun UidPanel(uid: Int, label: String, onUidChange: (Int) -> Unit) {
             mutableStateOf(false)
         }
         var lastValidUid by remember {
-            mutableIntStateOf(uid)
+            mutableStateOf(uid)
         }
-        val keyboardController = LocalSoftwareKeyboardController.current
 
+        val keyboardController = LocalSoftwareKeyboardController.current
         OutlinedTextField(
             modifier = Modifier.fillMaxWidth(),
             label = { Text(label) },
@@ -378,7 +365,6 @@ private fun UidPanel(uid: Int, label: String, onUidChange: (Int) -> Unit) {
     })
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SELinuxPanel(
     profile: Natives.Profile,
@@ -466,7 +452,7 @@ private fun SELinuxPanel(
             ),
             label = { Text(text = stringResource(R.string.profile_selinux_context)) },
             value = profile.context,
-            onValueChange = { }
+            onValueChange = { },
         )
     })
 }

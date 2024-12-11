@@ -12,7 +12,6 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,7 +54,7 @@ fun TemplateConfig(
         ) {
             OutlinedTextField(
                 modifier = Modifier
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .menuAnchor()
                     .fillMaxWidth(),
                 readOnly = true,
                 label = { Text(stringResource(R.string.profile_template)) },

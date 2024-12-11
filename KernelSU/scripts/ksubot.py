@@ -2,6 +2,7 @@ import asyncio
 import os
 import sys
 from telethon import TelegramClient
+from telethon.tl.functions.help import GetConfigRequest
 
 API_ID = 611335
 API_HASH = "d524b414d21f4d37f08684c1df41ac9c"
@@ -48,10 +49,7 @@ def check_environ():
         print("[-] Invalid CHAT_ID")
         exit(1)
     else:
-        try:
-            CHAT_ID = int(CHAT_ID)
-        except:
-            pass
+        CHAT_ID = int(CHAT_ID)
     if COMMIT_URL is None:
         print("[-] Invalid COMMIT_URL")
         exit(1)
@@ -67,14 +65,11 @@ def check_environ():
     if VERSION is None:
         print("[-] Invalid VERSION")
         exit(1)
-    if MESSAGE_THREAD_ID is not None and MESSAGE_THREAD_ID != "":
-        try:
-            MESSAGE_THREAD_ID = int(MESSAGE_THREAD_ID)
-        except:
-            print("[-] Invaild MESSAGE_THREAD_ID")
-            exit(1)
+    if MESSAGE_THREAD_ID is None:
+        print("[-] Invaild MESSAGE_THREAD_ID")
+        exit(1)
     else:
-        MESSAGE_THREAD_ID = None
+        MESSAGE_THREAD_ID = int(MESSAGE_THREAD_ID)
 
 
 async def main():

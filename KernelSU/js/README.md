@@ -109,12 +109,3 @@ Show a toast message.
 import { toast } from 'kernelsu';
 toast('Hello, world!');
 ```
-
-### moduleInfo
-
-Get Module info.
-```javascript
-import { moduleInfo } from 'kernelsu';
-// print moduleId in console
-console.log(moduleInfo());
-```

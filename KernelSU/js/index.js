@@ -113,7 +113,3 @@ export function fullScreen(isFullScreen) {
 export function toast(message) {
   ksu.toast(message);
 }
-
-export function moduleInfo() {
-  return ksu.moduleInfo();
-}

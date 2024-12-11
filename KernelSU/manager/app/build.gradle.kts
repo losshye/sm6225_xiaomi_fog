@@ -1,7 +1,4 @@
-@file:Suppress("UnstableApiUsage")
-
 import com.android.build.gradle.internal.api.BaseVariantOutputImpl
-import com.android.build.gradle.tasks.PackageAndroidArtifact
 
 plugins {
     alias(libs.plugins.agp.app)
@@ -37,7 +34,6 @@ android {
         aidl = true
         buildConfig = true
         compose = true
-        prefab = true
     }
 
     kotlinOptions {
@@ -49,13 +45,7 @@ android {
             useLegacyPackaging = true
         }
         resources {
-            // https://stackoverflow.com/a/58956288
-            // It will break Layout Inspector, but it's unused for release build.
-            excludes += "META-INF/*.version"
-            // https://github.com/Kotlin/kotlinx.coroutines?tab=readme-ov-file#avoiding-including-the-debug-infrastructure-in-the-resulting-apk
-            excludes += "DebugProbesKt.bin"
-            // https://issueantenna.com/repo/kotlin/kotlinx.coroutines/issues/3158
-            excludes += "kotlin-tooling-metadata.json"
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
 
@@ -68,27 +58,14 @@ android {
     applicationVariants.all {
         outputs.forEach {
             val output = it as BaseVariantOutputImpl
-            output.outputFileName = "KernelSU_${managerVersionName}_${managerVersionCode}-magic-$name.apk"
+            output.outputFileName = "KernelSU_${managerVersionName}_${managerVersionCode}-$name.apk"
         }
+
         kotlin.sourceSets {
             getByName(name) {
                 kotlin.srcDir("build/generated/ksp/$name/kotlin")
             }
         }
-    }
-
-    // https://stackoverflow.com/a/77745844
-    tasks.withType<PackageAndroidArtifact> {
-        doFirst { appMetadata.asFile.orNull?.writeText("") }
-    }
-
-    dependenciesInfo {
-        includeInApk = false
-        includeInBundle = false
-    }
-
-    androidResources {
-        generateLocaleConfig = true
     }
 }
 
@@ -110,7 +87,12 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
 
-    implementation(libs.compose.destinations.core)
+    implementation(libs.com.google.accompanist.drawablepainter)
+    implementation(libs.com.google.accompanist.navigation.animation)
+    implementation(libs.com.google.accompanist.systemuicontroller)
+    implementation(libs.com.google.accompanist.webview)
+
+    implementation(libs.compose.destinations.animations.core)
     ksp(libs.compose.destinations.ksp)
 
     implementation(libs.com.github.topjohnwu.libsu.core)
@@ -131,6 +113,4 @@ dependencies {
 
     implementation(libs.markdown)
     implementation(libs.androidx.webkit)
-
-    implementation(libs.lsposed.cxx)
 }

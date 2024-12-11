@@ -1,7 +1,6 @@
 package me.weishu.kernelsu.ui.component
 
 import android.graphics.text.LineBreaker
-import android.os.Build
 import android.os.Parcelable
 import android.text.Layout
 import android.text.method.LinkMovementMethod
@@ -97,8 +96,8 @@ interface ConfirmDialogHandle : DialogHandle {
 }
 
 private abstract class DialogHandleBase(
-    val visible: MutableState<Boolean>,
-    val coroutineScope: CoroutineScope
+    protected val visible: MutableState<Boolean>,
+    protected val coroutineScope: CoroutineScope
 ) : DialogHandle {
     override val isShown: Boolean
         get() = visible.value
@@ -433,9 +432,7 @@ private fun MarkdownContent(content: String) {
             TextView(context).apply {
                 movementMethod = LinkMovementMethod.getInstance()
                 setSpannableFactory(NoCopySpannableFactory.getInstance())
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    breakStrategy = LineBreaker.BREAK_STRATEGY_SIMPLE
-                }
+                breakStrategy = LineBreaker.BREAK_STRATEGY_SIMPLE
                 hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
