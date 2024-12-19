@@ -25,7 +25,6 @@
 #include <asm/elf.h>
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
-#include <misc/lyb_taskmmu.h>
 #include "internal.h"
 
 #ifdef CONFIG_KSU_SUSFS
@@ -469,62 +468,26 @@ static int show_vma_header_prefix(struct seq_file *m, unsigned long start,
 	/* Supports printing up to 40 bits per virtual address */
 	BUILD_BUG_ON(CONFIG_ARM64_VA_BITS > 40);
 
-	if (lyb_sultan_pid_shrink)
-	{
-		/* 
-		 * shrinks the PID map output to be as small as
-		 * possible by omitting non-significant leading zeros from
-		 * hex output.
-		 */
-		len = print_vma_hex10_shrink(out, start, __builtin_clzl);
+	len = print_vma_hex10(out, start, __builtin_clzl);
 
-		out[len++] = '-';
+	out[len++] = '-';
 
-		len += print_vma_hex10_shrink(out + len, end, __builtin_clzl);
+	len += print_vma_hex10(out + len, end, __builtin_clzl);
 
-		out[len++] = ' ';
-		out[len++] = "-r"[!!(flags & VM_READ)];
-		out[len++] = "-w"[!!(flags & VM_WRITE)];
-		out[len++] = "-x"[!!(flags & VM_EXEC)];
-		out[len++] = "ps"[!!(flags & VM_MAYSHARE)];
-		out[len++] = ' ';
+	out[len++] = ' ';
+	out[len++] = "-r"[!!(flags & VM_READ)];
+	out[len++] = "-w"[!!(flags & VM_WRITE)];
+	out[len++] = "-x"[!!(flags & VM_EXEC)];
+	out[len++] = "ps"[!!(flags & VM_MAYSHARE)];
+	out[len++] = ' ';
 
-		len += print_vma_hex10_shrink(out + len, pgoff, __builtin_clzll);
+	len += print_vma_hex10(out + len, pgoff, __builtin_clzll);
 
-		out[len++] = ' ';
-
-		len += print_vma_hex2_shrink(out + len, MAJOR(dev), __builtin_clz);
-
-		out[len++] = ':';
-
-		len += print_vma_hex2_shrink(out + len, MINOR(dev), __builtin_clz);
-
-		out[len++] = ' ';
-	} else {
-		/* 
-		 * retains insignificant leading zeros from printed hex values	
-		 * to maintain the current output format.
-		 */
-		len = print_vma_hex10(out, start, __builtin_clzl);
-
-		out[len++] = '-';
-
-		len += print_vma_hex10(out + len, end, __builtin_clzl);
-
-		out[len++] = ' ';
-		out[len++] = "-r"[!!(flags & VM_READ)];
-		out[len++] = "-w"[!!(flags & VM_WRITE)];
-		out[len++] = "-x"[!!(flags & VM_EXEC)];
-		out[len++] = "ps"[!!(flags & VM_MAYSHARE)];
-		out[len++] = ' ';
-
-		len += print_vma_hex10(out + len, pgoff, __builtin_clzll);
-
-		out[len++] = ' ';
+	out[len++] = ' ';
 
 	len += print_vma_hex3(out + len, MAJOR(dev), __builtin_clz);
 
-		out[len++] = ':';
+	out[len++] = ':';
 
 	len += print_vma_hex5(out + len, MINOR(dev), __builtin_clz);
 
@@ -682,9 +645,7 @@ static const struct seq_operations proc_pid_maps_op = {
 
 static int pid_maps_open(struct inode *inode, struct file *file)
 {
-	if (lyb_sultan_pid)
-		return do_maps_open(inode, file, &proc_pid_maps_op_sultanpid);
-	else return do_maps_open(inode, file, &proc_pid_maps_op);
+	return do_maps_open(inode, file, &proc_pid_maps_op);
 }
 
 const struct file_operations proc_pid_maps_operations = {
