@@ -137,33 +137,20 @@ static ssize_t debug_show(struct device *dev, struct device_attribute *attr, cha
 }
 
 
-static int parse_strtoul(const char *buf, unsigned long max, unsigned long *value)
-{
-	char *endp;
-
-	*value = simple_strtoul(skip_spaces(buf), &endp, 0);
-	endp = skip_spaces(endp);
-	if (*endp || *value > max)
-		return -EINVAL;
-
-	return 0;
-}
-
-
 // store debug mode on/off (1/0)
 static ssize_t debug_store(struct device *dev, struct device_attribute *attr,
-			   const char *buf, size_t count)
+						const char *buf, size_t count)
 {
 	ssize_t ret = -EINVAL;
-	unsigned long val;
+	unsigned int val;
 
 	// check data and store if valid
-	ret = parse_strtoul(buf, 1, &val);
+	ret = sscanf(buf, "%d", &val);
 
-	if (ret)
-		return ret;
+	if (ret != 1)
+		return -EINVAL;
 
-	if (val)
+	if (val == 1)
 		wl_blocker_debug = true;
 	else
 		wl_blocker_debug = false;
