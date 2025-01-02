@@ -216,8 +216,6 @@ VPATH		:= $(srctree)$(if $(KBUILD_EXTMOD),:$(KBUILD_EXTMOD))
 
 export srctree objtree VPATH
 
-CCACHE := ccache
-
 # To make sure we do not include .config for any of the *config targets
 # catch them early, and hand them over to scripts/kconfig/Makefile
 # It is allowed to specify more targets when calling make, including
@@ -368,41 +366,41 @@ HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS 2>/dev/null)
 HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
 ifneq ($(LLVM),)
-HOSTCC	= $(CCACHE) clang
-HOSTCXX	= $(CCACHE) clang++
+HOSTCC	= clang
+HOSTCXX	= clang++
 else
-HOSTCC	= $(CCACHE) gcc
-HOSTCXX	= $(CCACHE) g++
+HOSTCC	= gcc
+HOSTCXX	= g++
 endif
-KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -ggdb \
+KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 \
 		-fomit-frame-pointer -std=gnu89 -pipe -Wdeclaration-after-statement \
 		$(HOST_LFS_CFLAGS) $(HOSTCFLAGS)
-KBUILD_HOSTCXXFLAGS := -Wall -ggdb -O3 $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
+KBUILD_HOSTCXXFLAGS := -Wall -O3 $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
 KBUILD_HOSTLDFLAGS  := $(HOST_LFS_LDFLAGS) $(HOSTLDFLAGS)
 KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 
 # Make variables (CC, etc...)
-CPP		= $(CCACHE) $(CC) -E
+CPP		= $(CC) -E
 ifneq ($(LLVM),)
-CC		= $(CCACHE) clang
-LD		= $(CCACHE) ld.lld
-AR		= $(CCACHE) llvm-ar
-NM		= $(CCACHE) llvm-nm
-OBJCOPY		= $(CCACHE) llvm-objcopy
-OBJDUMP		= $(CCACHE) llvm-objdump
-READELF		= $(CCACHE) llvm-readelf
-OBJSIZE		= $(CCACHE) llvm-size
-STRIP		= $(CCACHE) llvm-strip
+CC		= clang
+LD		= ld.lld
+AR		= llvm-ar
+NM		= llvm-nm
+OBJCOPY		= llvm-objcopy
+OBJDUMP		= llvm-objdump
+READELF		= llvm-readelf
+OBJSIZE		= llvm-size
+STRIP		= llvm-strip
 else
-CC		= $(CCACHE) $(CROSS_COMPILE)gcc
-LD		= $(CCACHE) $(CROSS_COMPILE)ld
-AR		?= $(CCACHE) $(CROSS_COMPILE)ar
-NM		?= $(CCACHE) $(CROSS_COMPILE)nm
-OBJCOPY		= $(CCACHE) $(CROSS_COMPILE)objcopy
-OBJDUMP		= $(CCACHE) $(CROSS_COMPILE)objdump
-READELF		= $(CCACHE) $(CROSS_COMPILE)readelf
-OBJSIZE		= $(CCACHE) $(CROSS_COMPILE)size
-STRIP		= $(CCACHE) $(CROSS_COMPILE)strip
+CC		= $(CROSS_COMPILE)gcc
+LD		= $(CROSS_COMPILE)ld
+AR		?= $(CROSS_COMPILE)ar
+NM		?= $(CROSS_COMPILE)nm
+OBJCOPY		= $(CROSS_COMPILE)objcopy
+OBJDUMP		= $(CROSS_COMPILE)objdump
+READELF		= $(CROSS_COMPILE)readelf
+OBJSIZE		= $(CROSS_COMPILE)size
+STRIP		= $(CROSS_COMPILE)strip
 endif
 LEX		= flex
 YACC		= bison
@@ -421,7 +419,7 @@ CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 NOSTDINC_FLAGS  =
 CFLAGS_MODULE   =
 AFLAGS_MODULE   =
-LDFLAGS_MODULE  = -03 --strip-debug
+LDFLAGS_MODULE  = --strip-debug
 CFLAGS_KERNEL	=
 AFLAGS_KERNEL	=
 LDFLAGS_vmlinux =
@@ -456,8 +454,8 @@ KBUILD_CPPFLAGS := -D__KERNEL__
 # Tell compiler to tune the performance of the code for a specified
 # target processor
 ifeq ($(cc-name),gcc)
-KBUILD_CFLAGS += -mcpu=cortex-a53+crc -mtune=cortex-a53 -fdata-sections -ffunction-sections -fno-exceptions -fno-rtti -ggdb
-KBUILD_AFLAGS += -mcpu=cortex-a53+crc -mtune=cortex-a53 -fdata-sections -ffunction-sections -fno-exceptions -fno-rtti -ggdb
+KBUILD_CFLAGS += -mcpu=cortex-a73.cortex-a53 -mtune=cortex-a73.cortex-a53
+KBUILD_AFLAGS += -mcpu=cortex-a73.cortex-a53 -mtune=cortex-a73.cortex-a53
 else ifeq ($(cc-name),clang)
 KBUILD_CFLAGS += -mcpu=cortex-a73+crypto+crc -mtune=cortex-a73
 KBUILD_AFLAGS += -mcpu=cortex-a73 -mtune=cortex-a73
@@ -655,8 +653,8 @@ CC_FLAGS_LTO	:= -flto=jobserver -fipa-pta -fno-fat-lto-objects \
 		   -fuse-linker-plugin -fwhole-program
 KBUILD_CFLAGS	+= $(CC_FLAGS_LTO)
 LTO_LDFLAGS	:= $(CC_FLAGS_LTO) -Wno-lto-type-mismatch -Wno-psabi \
-		   -Wno-stringop-overflow \
-		   -flinker-output=nolto-rel
+		   -Wno-stringop-overflow -Wno-stringop-overread \
+		   -Wno-alloc-size-larger-than -flinker-output=nolto-rel
 LDFINAL		:= $(CONFIG_SHELL) $(srctree)/scripts/gcc-ld $(LTO_LDFLAGS)
 AR		:= $(CROSS_COMPILE)gcc-ar
 NM		:= $(CROSS_COMPILE)gcc-nm
@@ -783,11 +781,6 @@ KBUILD_CFLAGS += -Os
 KBUILD_RUSTFLAGS += -Copt-level=s
 endif
 
-# CCACHE Flags
-KBUILD_CFLAGS 	+= $(call cc-disable-warning,maybe-uninitialized,) \
-		   $(call cc-disable-warning,unused-variable,) \
-		   $(call cc-disable-warning,unused-function)
-
 # Tell gcc to never replace conditional load with a non-conditional one
 KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)
 KBUILD_CFLAGS	+= $(call cc-option,-fno-allow-store-data-races)
@@ -863,17 +856,17 @@ endif
 ifeq ($(cc-name),clang)
 KBUILD_CFLAGS	+= -mllvm -inline-threshold=1
 KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=1
-KBUILD_CFLAGS   += -mllvm -unroll-threshold=1
+KBUILD_CFLAGS   += -mllvm -inlinehint-threshold=1
 else ifeq ($(cc-name),gcc)
-KBUILD_CFLAGS	+= --param max-inline-insns-auto=1
+KBUILD_CFLAGS	+= --param max-inline-insns-auto=1000
 
 # We limit inlining to 5KB on the stack.
 KBUILD_CFLAGS	+= --param large-stack-frame=1288
 
-KBUILD_CFLAGS	+= --param inline-min-speedup=5
+KBUILD_CFLAGS	+= --param inline-min-speedup=15
 KBUILD_CFLAGS	+= --param inline-unit-growth=60
-KBUILD_CFLAGS   += --param=max-inline-insns-single=1
-KBUILD_CFLAGS   += --param=early-inlining-insns=1
+KBUILD_CFLAGS   += --param=max-inline-insns-single=200 
+KBUILD_CFLAGS   += --param=early-inlining-insns=14
 endif
 
 
@@ -1145,9 +1138,6 @@ KBUILD_CFLAGS   += $(call cc-option,-Werror=designated-init)
 
 # change __FILE__ to the relative path from the srctree
 KBUILD_CFLAGS	+= $(call cc-option,-fmacro-prefix-map=$(srctree)/=)
-
-# Use store motion pass for gcse
-KBUILD_CFLAGS	+= $(call cc-option,-fgcse-sm)
 
 # use the deterministic mode of AR if available
 KBUILD_ARFLAGS := $(call ar-option,D)
