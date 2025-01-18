@@ -3433,7 +3433,7 @@ static void kfree_rcu_monitor(struct work_struct *work)
 	schedule_delayed_monitor_work(krcp);
 
 	raw_spin_unlock_irqrestore(&krcp->lock, flags);
-}
+
 
 static enum hrtimer_restart
 schedule_page_work_fn(struct hrtimer *t)
