@@ -418,7 +418,6 @@ static void qcom_glink_send_read_notify(struct qcom_glink *glink)
 	struct glink_msg msg;
 
 	msg.cmd = cpu_to_le16(GLINK_CMD_READ_NOTIF);
-	msg.cmd = cpu_to_le16(GLINK_CMD_READ_NOTIF);
 	msg.param1 = 0;
 	msg.param2 = 0;
 
@@ -492,7 +491,6 @@ static int qcom_glink_send_version(struct qcom_glink *glink)
 	struct glink_msg msg;
 
 	msg.cmd = cpu_to_le16(GLINK_CMD_VERSION);
-	msg.cmd = cpu_to_le16(GLINK_CMD_VERSION);
 	msg.param1 = cpu_to_le16(GLINK_VERSION_1);
 	msg.param2 = cpu_to_le32(glink->features);
 
@@ -504,7 +502,6 @@ static void qcom_glink_send_version_ack(struct qcom_glink *glink)
 {
 	struct glink_msg msg;
 
-	msg.cmd = cpu_to_le16(GLINK_CMD_VERSION_ACK);
 	msg.cmd = cpu_to_le16(GLINK_CMD_VERSION_ACK);
 	msg.param1 = cpu_to_le16(GLINK_VERSION_1);
 	msg.param2 = cpu_to_le32(glink->features);
@@ -518,7 +515,6 @@ static void qcom_glink_send_open_ack(struct qcom_glink *glink,
 {
 	struct glink_msg msg;
 
-	msg.cmd = cpu_to_le16(GLINK_CMD_OPEN_ACK);
 	msg.cmd = cpu_to_le16(GLINK_CMD_OPEN_ACK);
 	msg.param1 = cpu_to_le16(channel->rcid);
 	msg.param2 = cpu_to_le32(0);
@@ -547,11 +543,9 @@ static void qcom_glink_handle_intent_req_ack(struct qcom_glink *glink,
 
 /**
  * qcom_glink_send_open_req() - send a GLINK_CMD_OPEN request to the remote
- * qcom_glink_send_open_req() - send a GLINK_CMD_OPEN request to the remote
  * @glink: Ptr to the glink edge
  * @channel: Ptr to the channel that the open req is sent
  *
- * Allocates a local channel id and sends a GLINK_CMD_OPEN message to the remote.
  * Allocates a local channel id and sends a GLINK_CMD_OPEN message to the remote.
  * Will return with refcount held, regardless of outcome.
  *
@@ -583,7 +577,6 @@ static int qcom_glink_send_open_req(struct qcom_glink *glink,
 	CH_INFO(channel, "\n");
 
 	req.msg.cmd = cpu_to_le16(GLINK_CMD_OPEN);
-	req.msg.cmd = cpu_to_le16(GLINK_CMD_OPEN);
 	req.msg.param1 = cpu_to_le16(channel->lcid);
 	req.msg.param2 = cpu_to_le32(name_len);
 	strlcpy(req.name, channel->name, GLINK_NAME_SIZE);
@@ -611,7 +604,6 @@ static void qcom_glink_send_close_req(struct qcom_glink *glink,
 	struct glink_msg req;
 
 	req.cmd = cpu_to_le16(GLINK_CMD_CLOSE);
-	req.cmd = cpu_to_le16(GLINK_CMD_CLOSE);
 	req.param1 = cpu_to_le16(channel->lcid);
 	req.param2 = 0;
 
@@ -624,7 +616,6 @@ static void qcom_glink_send_close_ack(struct qcom_glink *glink,
 {
 	struct glink_msg req;
 
-	req.cmd = cpu_to_le16(GLINK_CMD_CLOSE_ACK);
 	req.cmd = cpu_to_le16(GLINK_CMD_CLOSE_ACK);
 	req.param1 = cpu_to_le16(rcid);
 	req.param2 = 0;
@@ -649,7 +640,6 @@ static int __qcom_glink_rx_done(struct qcom_glink *glink,
 	bool reuse = intent->reuse;
 	int ret;
 
-	cmd.id = reuse ? GLINK_CMD_RX_DONE_W_REUSE : GLINK_CMD_RX_DONE;
 	cmd.id = reuse ? GLINK_CMD_RX_DONE_W_REUSE : GLINK_CMD_RX_DONE;
 	cmd.lcid = cid;
 	cmd.liid = iid;
@@ -796,7 +786,6 @@ static int qcom_glink_send_intent_req_ack(struct qcom_glink *glink,
 	struct glink_msg msg;
 
 	msg.cmd = cpu_to_le16(GLINK_CMD_RX_INTENT_REQ_ACK);
-	msg.cmd = cpu_to_le16(GLINK_CMD_RX_INTENT_REQ_ACK);
 	msg.param1 = cpu_to_le16(channel->lcid);
 	msg.param2 = cpu_to_le32(granted);
 
@@ -837,7 +826,6 @@ static int qcom_glink_advertise_intent(struct qcom_glink *glink,
 	intent->advertised = true;
 	spin_unlock_irqrestore(&channel->intent_lock, flags);
 
-	cmd.id = cpu_to_le16(GLINK_CMD_INTENT);
 	cmd.id = cpu_to_le16(GLINK_CMD_INTENT);
 	cmd.lcid = cpu_to_le16(channel->lcid);
 	cmd.count = cpu_to_le32(1);
@@ -1236,7 +1224,6 @@ static int qcom_glink_send_signals(struct qcom_glink *glink,
 	struct glink_msg msg;
 
 	msg.cmd = cpu_to_le16(GLINK_CMD_SIGNALS);
-	msg.cmd = cpu_to_le16(GLINK_CMD_SIGNALS);
 	msg.param1 = cpu_to_le16(channel->lcid);
 	msg.param2 = cpu_to_le32(sigs);
 
@@ -1303,14 +1290,8 @@ static irqreturn_t qcom_glink_native_intr(int irq, void *data)
 		case GLINK_CMD_CLOSE:
 		case GLINK_CMD_CLOSE_ACK:
 		case GLINK_CMD_RX_INTENT_REQ:
-		case GLINK_CMD_VERSION:
-		case GLINK_CMD_VERSION_ACK:
-		case GLINK_CMD_CLOSE:
-		case GLINK_CMD_CLOSE_ACK:
-		case GLINK_CMD_RX_INTENT_REQ:
 			ret = qcom_glink_rx_defer(glink, 0);
 			break;
-		case GLINK_CMD_OPEN_ACK:
 		case GLINK_CMD_OPEN_ACK:
 			ret = qcom_glink_rx_open_ack(glink, param1);
 			qcom_glink_rx_advance(glink, ALIGN(sizeof(msg), 8));
@@ -1318,17 +1299,11 @@ static irqreturn_t qcom_glink_native_intr(int irq, void *data)
 		case GLINK_CMD_OPEN:
 			/* upper 16 bits of param2 are the "prio" field */
 			ret = qcom_glink_rx_defer(glink, param2 & 0xffff);
-		case GLINK_CMD_OPEN:
-			/* upper 16 bits of param2 are the "prio" field */
-			ret = qcom_glink_rx_defer(glink, param2 & 0xffff);
 			break;
-		case GLINK_CMD_TX_DATA:
-		case GLINK_CMD_TX_DATA_CONT:
 		case GLINK_CMD_TX_DATA:
 		case GLINK_CMD_TX_DATA_CONT:
 			ret = qcom_glink_rx_data(glink, avail);
 			break;
-		case GLINK_CMD_READ_NOTIF:
 		case GLINK_CMD_READ_NOTIF:
 			qcom_glink_rx_advance(glink, ALIGN(sizeof(msg), 8));
 
@@ -1336,25 +1311,20 @@ static irqreturn_t qcom_glink_native_intr(int irq, void *data)
 			mbox_client_txdone(glink->mbox_chan, 0);
 			break;
 		case GLINK_CMD_INTENT:
-		case GLINK_CMD_INTENT:
 			qcom_glink_handle_intent(glink, param1, param2, avail);
 			break;
-		case GLINK_CMD_RX_DONE:
 		case GLINK_CMD_RX_DONE:
 			qcom_glink_handle_rx_done(glink, param1, param2, false);
 			qcom_glink_rx_advance(glink, ALIGN(sizeof(msg), 8));
 			break;
 		case GLINK_CMD_RX_DONE_W_REUSE:
-		case GLINK_CMD_RX_DONE_W_REUSE:
 			qcom_glink_handle_rx_done(glink, param1, param2, true);
 			qcom_glink_rx_advance(glink, ALIGN(sizeof(msg), 8));
 			break;
 		case GLINK_CMD_RX_INTENT_REQ_ACK:
-		case GLINK_CMD_RX_INTENT_REQ_ACK:
 			qcom_glink_handle_intent_req_ack(glink, param1, param2);
 			qcom_glink_rx_advance(glink, ALIGN(sizeof(msg), 8));
 			break;
-		case GLINK_CMD_SIGNALS:
 		case GLINK_CMD_SIGNALS:
 			qcom_glink_handle_signals(glink, param1, param2);
 			qcom_glink_rx_advance(glink, ALIGN(sizeof(msg), 8));
@@ -1588,7 +1558,6 @@ static int qcom_glink_request_intent(struct qcom_glink *glink,
 	atomic_set(&channel->intent_req_comp, 0);
 
 	cmd.id = GLINK_CMD_RX_INTENT_REQ;
-	cmd.id = GLINK_CMD_RX_INTENT_REQ;
 	cmd.cid = channel->lcid;
 	cmd.size = size;
 
@@ -1673,7 +1642,6 @@ static int __qcom_glink_send(struct glink_channel *channel,
 		left_size = len - chunk_size;
 	}
 	req.msg.cmd = cpu_to_le16(GLINK_CMD_TX_DATA);
-	req.msg.cmd = cpu_to_le16(GLINK_CMD_TX_DATA);
 	req.msg.param1 = cpu_to_le16(channel->lcid);
 	req.msg.param2 = cpu_to_le32(iid);
 	req.chunk_size = cpu_to_le32(chunk_size);
@@ -1682,9 +1650,6 @@ static int __qcom_glink_send(struct glink_channel *channel,
 	ret = qcom_glink_tx(glink, &req, sizeof(req), data, chunk_size, wait);
 
 	/* Mark intent available if we failed */
-	if (ret) {
-		if (intent)
-			intent->in_use = false;
 	if (ret) {
 		if (intent)
 			intent->in_use = false;
@@ -1699,7 +1664,6 @@ static int __qcom_glink_send(struct glink_channel *channel,
 		left_size -= chunk_size;
 
 		req.msg.cmd = cpu_to_le16(GLINK_CMD_TX_DATA_CONT);
-		req.msg.cmd = cpu_to_le16(GLINK_CMD_TX_DATA_CONT);
 		req.msg.param1 = cpu_to_le16(channel->lcid);
 		req.msg.param2 = cpu_to_le32(iid);
 		req.chunk_size = cpu_to_le32(chunk_size);
@@ -1709,9 +1673,6 @@ static int __qcom_glink_send(struct glink_channel *channel,
 				    chunk_size, wait);
 
 		/* Mark intent available if we failed */
-		if (ret) {
-			if (intent)
-				intent->in_use = false;
 		if (ret) {
 			if (intent)
 				intent->in_use = false;
@@ -1923,9 +1884,6 @@ static void qcom_glink_rx_close_ack(struct qcom_glink *glink, unsigned int lcid)
 	struct glink_channel *channel;
 	unsigned long flags;
 
-	/* To wakeup any blocking writers */
-	wake_up_all(&glink->tx_avail_notify);
-
 	spin_lock_irqsave(&glink->idr_lock, flags);
 	channel = idr_find(&glink->lcids, lcid);
 	if (WARN(!channel, "close ack on unknown channel\n")) {
@@ -1980,26 +1938,20 @@ static void qcom_glink_work(struct work_struct *work)
 
 		switch (cmd) {
 		case GLINK_CMD_VERSION:
-		case GLINK_CMD_VERSION:
 			qcom_glink_receive_version(glink, param1, param2);
 			break;
-		case GLINK_CMD_VERSION_ACK:
 		case GLINK_CMD_VERSION_ACK:
 			qcom_glink_receive_version_ack(glink, param1, param2);
 			break;
 		case GLINK_CMD_OPEN:
-		case GLINK_CMD_OPEN:
 			qcom_glink_rx_open(glink, param1, msg->data);
 			break;
-		case GLINK_CMD_CLOSE:
 		case GLINK_CMD_CLOSE:
 			qcom_glink_rx_close(glink, param1);
 			break;
 		case GLINK_CMD_CLOSE_ACK:
-		case GLINK_CMD_CLOSE_ACK:
 			qcom_glink_rx_close_ack(glink, param1);
 			break;
-		case GLINK_CMD_RX_INTENT_REQ:
 		case GLINK_CMD_RX_INTENT_REQ:
 			qcom_glink_handle_intent_req(glink, param1, param2);
 			break;

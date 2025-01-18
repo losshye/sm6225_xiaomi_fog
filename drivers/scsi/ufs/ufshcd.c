@@ -2545,13 +2545,7 @@ static ssize_t ufshcd_clkgate_enable_store(struct device *dev,
 		ufshcd_release(hba, false);
 	} else {
 		spin_lock_irqsave(hba->host->host_lock, flags);
-	if (value) {
-		ufshcd_release(hba, false);
-	} else {
-		spin_lock_irqsave(hba->host->host_lock, flags);
 		hba->clk_gating.active_reqs++;
-		spin_unlock_irqrestore(hba->host->host_lock, flags);
-	}
 		spin_unlock_irqrestore(hba->host->host_lock, flags);
 	}
 
