@@ -3378,7 +3378,7 @@ need_wait_for_krwp_work(struct kfree_rcu_cpu_work *krwp)
  */
 static void kfree_rcu_monitor(struct work_struct *work)
 {
-        struct kfree_rcu_cpu *krcp = container_of(work,
+	struct kfree_rcu_cpu *krcp = container_of(work,
 		struct kfree_rcu_cpu, monitor_work.work);
 	unsigned long flags;
 	int i, j;
@@ -3389,15 +3389,16 @@ static void kfree_rcu_monitor(struct work_struct *work)
 	for (i = 0; i < KFREE_N_BATCHES; i++) {
 		struct kfree_rcu_cpu_work *krwp = &(krcp->krw_arr[i]);
 
-		// Try to detach bulk_head or head and attach it, only when
-		// all channels are free.  Any channel is not free means at krwp
-		// there is on-going rcu work to handle krwp's free business.
-		if (need_wait_for_krwp_work(krwp))
-			continue;
-
-		if (need_offload_krc(krcp)) {
-			// Channel 1 corresponds to SLAB ptrs.
-			// Channel 2 corresponds to vmalloc ptrs.
+		// Try to detach bkvhead or head and attach it over any
+		// available corresponding free channel. It can be that
+		// a previous RCU batch is in progress, it means that
+		// immediately to queue another one is not possible so
+		// in that case the monitor work is rearmed.
+		if ((krcp->bkvhead[0] && !krwp->bkvhead_free[0]) ||
+			(krcp->bkvhead[1] && !krwp->bkvhead_free[1]) ||
+				(krcp->head && !krwp->head_free)) {
+			// Channel 1 corresponds to the SLAB-pointer bulk path.
+			// Channel 2 corresponds to vmalloc-pointer bulk path.
 			for (j = 0; j < FREE_N_CHANNELS; j++) {
 				if (!krwp->bkvhead_free[j]) {
 					krwp->bkvhead_free[j] = krcp->bkvhead[j];
@@ -3405,7 +3406,8 @@ static void kfree_rcu_monitor(struct work_struct *work)
 				}
 			}
 
-			// Channel 3 corresponds to emergency path.
+			// Channel 3 corresponds to both SLAB and vmalloc
+			// objects queued on the linked list.
 			if (!krwp->head_free) {
 				krwp->head_free = krcp->head;
 				krcp->head = NULL;
@@ -3421,12 +3423,17 @@ static void kfree_rcu_monitor(struct work_struct *work)
 			queue_rcu_work(system_wq, &krwp->rcu_work);
 		}
 	}
-}
 
-        if (need_offload_krc(krcp))
-	schedule_delayed_monitor_work(krcp);
+	// If there is nothing to detach, it means that our job is
+	// successfully done here. In case of having at least one
+	// of the channels that is still busy we should rearm the
+	// work to repeat an attempt. Because previous batches are
+	// still in progress.
+	if (need_offload_krc(krcp))
+		schedule_delayed_monitor_work(krcp);
+
 	raw_spin_unlock_irqrestore(&krcp->lock, flags);
-
+}
 
 static enum hrtimer_restart
 schedule_page_work_fn(struct hrtimer *t)
