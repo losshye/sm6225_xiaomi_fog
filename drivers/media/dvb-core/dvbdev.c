@@ -100,15 +100,9 @@ static int dvb_device_open(struct inode *inode, struct file *file)
 
 	if (minor >= MAX_DVB_MINORS)
 		return -ENODEV;
-	unsigned int minor = iminor(inode);
-
-	if (minor >= MAX_DVB_MINORS)
-		return -ENODEV;
 
 	mutex_lock(&dvbdev_mutex);
 	down_read(&minor_rwsem);
-
-	dvbdev = dvb_minors[minor];
 
 	dvbdev = dvb_minors[minor];
 
