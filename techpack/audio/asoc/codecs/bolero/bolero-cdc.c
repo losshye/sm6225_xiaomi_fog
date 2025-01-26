@@ -1051,101 +1051,152 @@ int bolero_register_wake_irq(struct snd_soc_component *component,
 }
 EXPORT_SYMBOL(bolero_register_wake_irq);
 
-#ifdef CONFIG_SOUND_CONTROL
-struct snd_soc_codec *sound_control_codec_ptr;
-
-static ssize_t headphone_gain_show(struct kobject *kobj,
-		struct kobj_attribute *attr, char *buf)
+/**
+ * bolero_tx_clk_switch - Switch tx macro clock
+ *
+ * @component: pointer to codec component instance.
+ *
+ * @clk_src: 0 for TX_RCG and 1 for VA_RCG
+ *
+ * Returns 0 on success or -EINVAL on error.
+ */
+int bolero_tx_clk_switch(struct snd_soc_component *component, int clk_src)
 {
-	return snprintf(buf, PAGE_SIZE, "%d %d\n",
-		snd_soc_read(sound_control_codec_ptr, BOLERO_CDC_RX_RX0_RX_VOL_CTL),
-		snd_soc_read(sound_control_codec_ptr, BOLERO_CDC_RX_RX1_RX_VOL_CTL)
-	);
+	struct bolero_priv *priv = NULL;
+	int ret = 0;
+
+	if (!component)
+		return -EINVAL;
+
+	priv = snd_soc_component_get_drvdata(component);
+	if (!priv)
+		return -EINVAL;
+
+	if (!bolero_is_valid_codec_dev(priv->dev)) {
+		dev_err(component->dev, "%s: invalid codec\n", __func__);
+		return -EINVAL;
+	}
+
+	if (priv->macro_params[TX_MACRO].clk_switch)
+		ret = priv->macro_params[TX_MACRO].clk_switch(component,
+							      clk_src);
+
+	return ret;
 }
+EXPORT_SYMBOL(bolero_tx_clk_switch);
 
-static ssize_t headphone_gain_store(struct kobject *kobj,
-		struct kobj_attribute *attr, const char *buf, size_t count)
+/**
+ * bolero_tx_mclk_enable - Enable/Disable TX Macro mclk
+ *
+ * @component: pointer to codec component instance.
+ * @enable: set true to enable, otherwise false.
+ *
+ * Returns 0 on success or -EINVAL on error.
+ */
+int bolero_tx_mclk_enable(struct snd_soc_component *component,
+			  bool enable)
 {
+	struct bolero_priv *priv = NULL;
+	int ret = 0;
 
-	int input_l, input_r;
+	if (!component)
+		return -EINVAL;
 
-	sscanf(buf, "%d %d", &input_l, &input_r);
+	priv = snd_soc_component_get_drvdata(component);
+	if (!priv)
+		return -EINVAL;
 
-	if (input_l < -40 || input_l > 20)
-		input_l = 0;
+	if (!bolero_is_valid_codec_dev(priv->dev)) {
+		dev_err(component->dev, "%s: invalid codec\n", __func__);
+		return -EINVAL;
+	}
 
-	if (input_r < -40 || input_r > 20)
-		input_r = 0;
+	if (priv->macro_params[TX_MACRO].clk_enable)
+		ret = priv->macro_params[TX_MACRO].clk_enable(component,
+								enable);
 
-	snd_soc_write(sound_control_codec_ptr, BOLERO_CDC_RX_RX0_RX_VOL_CTL, input_l);
-	snd_soc_write(sound_control_codec_ptr, BOLERO_CDC_RX_RX1_RX_VOL_CTL, input_r);
-
-	return count;
+	return ret;
 }
+EXPORT_SYMBOL(bolero_tx_mclk_enable);
 
-static struct kobj_attribute headphone_gain_attribute =
-	__ATTR(headphone_gain, 0664,
-		headphone_gain_show,
-		headphone_gain_store);
-
-static struct attribute *sound_control_attrs[] = {
-		&headphone_gain_attribute.attr,
-		NULL,
-};
-
-static struct attribute_group sound_control_attr_group = {
-		.attrs = sound_control_attrs,
-};
-
-static struct kobject *sound_control_kobj;
-#endif
-
-static int bolero_soc_codec_probe(struct snd_soc_codec *codec)
+/**
+ * bolero_register_event_listener - Register/Deregister to event listener
+ *
+ * @component: pointer to codec component instance.
+ * @enable: when set to 1 registers to event listener otherwise, derigisters
+ *          from the event listener
+ *
+ * Returns 0 on success or -EINVAL on error.
+ */
+int bolero_register_event_listener(struct snd_soc_component *component,
+				   bool enable)
 {
-	struct bolero_priv *priv = dev_get_drvdata(codec->dev);
+	struct bolero_priv *priv = NULL;
+	int ret = 0;
+
+	if (!component)
+		return -EINVAL;
+
+	priv = snd_soc_component_get_drvdata(component);
+	if (!priv)
+		return -EINVAL;
+
+	if (!bolero_is_valid_codec_dev(priv->dev)) {
+		dev_err(component->dev, "%s: invalid codec\n", __func__);
+		return -EINVAL;
+	}
+
+	if (priv->macro_params[TX_MACRO].reg_evt_listener)
+		ret = priv->macro_params[TX_MACRO].reg_evt_listener(component,
+								    enable);
+
+	return ret;
+}
+EXPORT_SYMBOL(bolero_register_event_listener);
+
+static int bolero_soc_codec_probe(struct snd_soc_component *component)
+{
+	struct bolero_priv *priv = dev_get_drvdata(component->dev);
 	int macro_idx, ret = 0;
 
-#ifdef CONFIG_SOUND_CONTROL
-	sound_control_codec_ptr = codec;
-#endif
+	snd_soc_component_init_regmap(component, priv->regmap);
+
+	if (!priv->version) {
+		/*
+		 * In order for the ADIE RTC to differentiate between targets
+		 * version info is used.
+		 * Assign 1.0 for target with only one macro
+		 * Assign 1.1 for target with two macros
+		 * Assign 1.2 for target with more than two macros
+		 */
+		if (priv->num_macros_registered == 1)
+			priv->version = BOLERO_VERSION_1_0;
+		else if (priv->num_macros_registered == 2)
+			priv->version = BOLERO_VERSION_1_1;
+		else if (priv->num_macros_registered > 2)
+			priv->version = BOLERO_VERSION_1_2;
+	}
+
+	/* Assign bolero version 2.1 for bolero 2.1 */
+	if ((snd_soc_component_read32(component,
+		BOLERO_CDC_VA_TOP_CSR_CORE_ID_0) == 0x2) &&
+		(snd_soc_component_read32(component,
+			BOLERO_CDC_VA_TOP_CSR_CORE_ID_1) == 0xE))
+		priv->version = BOLERO_VERSION_2_1;
 
 	/* call init for supported macros */
 	for (macro_idx = START_MACRO; macro_idx < MAX_MACRO; macro_idx++) {
 		if (priv->macro_params[macro_idx].init) {
-			ret = priv->macro_params[macro_idx].init(codec);
+			ret = priv->macro_params[macro_idx].init(component);
 			if (ret < 0) {
-				dev_err(codec->dev,
+				dev_err(component->dev,
 					"%s: init for macro %d failed\n",
 					__func__, macro_idx);
 				goto err;
 			}
 		}
 	}
-	#ifdef CONFIG_SOUND_CONTROL
-	sound_control_kobj = kobject_create_and_add("sound_control", kernel_kobj);
-	if (sound_control_kobj == NULL) {
-		pr_warn("%s kobject create failed!\n", __func__);
-        }
-
-	ret = sysfs_create_group(sound_control_kobj, &sound_control_attr_group);
-        if (ret) {
-		pr_warn("%s sysfs file create failed!\n", __func__);
-	}
-#endif
-	priv->codec = codec;
-	/*
-	 * In order for the ADIE RTC to differentiate between targets
-	 * version info is used.
-	 * Assign 1.0 for target with only one macro
-	 * Assign 1.1 for target with two macros
-	 * Assign 1.2 for target with more than two macros
-	 */
-	if (priv->num_macros_registered == 1)
-		priv->version = BOLERO_VERSION_1_0;
-	else if (priv->num_macros_registered == 2)
-		priv->version = BOLERO_VERSION_1_1;
-	else if (priv->num_macros_registered > 2)
-		priv->version = BOLERO_VERSION_1_2;
+	priv->component = component;
 
 	ret = snd_event_client_register(priv->dev, &bolero_ssr_ops, priv);
 	if (!ret) {
