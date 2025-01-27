@@ -6330,51 +6330,6 @@ static struct {
 
 #endif /* CONFIG_NO_HZ_COMMON */
 
-#ifdef CONFIG_NO_HZ_COMMON
-
-/*
- * Record CPU load on nohz entry so we know the tickless load to account
- * on nohz exit. cpu_load[0] happens then to be updated more frequently
- * than other cpu_load[idx] but it should be fine as cpu_load readers
- * shouldn't rely into synchronized cpu_load[*] updates.
- */
-void cpu_load_update_nohz_start(void)
-{
-	struct rq *this_rq = this_rq();
-
-	/*
-	 * This is all lockless but should be fine. If weighted_cpuload changes
-	 * concurrently we'll exit nohz. And cpu_load write can race with
-	 * cpu_load_update_idle() but both updater would be writing the same.
-	 */
-	this_rq->cpu_load[0] = weighted_cpuload(this_rq);
-}
-
-/*
- * Account the tickless load in the end of a nohz frame.
- */
-void cpu_load_update_nohz_stop(void)
-{
-	unsigned long curr_jiffies = READ_ONCE(jiffies);
-	struct rq *this_rq = this_rq();
-	unsigned long load;
-	struct rq_flags rf;
-
-	if (curr_jiffies == this_rq->last_load_update_tick)
-		return;
-
-	load = weighted_cpuload(this_rq);
-	rq_lock(this_rq, &rf);
-	update_rq_clock(this_rq);
-	cpu_load_update_nohz(this_rq, curr_jiffies, load);
-	rq_unlock(this_rq, &rf);
-}
-#else /* !CONFIG_NO_HZ_COMMON */
-static inline void cpu_load_update_nohz(struct rq *this_rq,
-					unsigned long curr_jiffies,
-					unsigned long load) { }
-#endif /* CONFIG_NO_HZ_COMMON */
-
 static unsigned long cpu_load(struct rq *rq)
 {
 	return cfs_rq_load_avg(&rq->cfs);
