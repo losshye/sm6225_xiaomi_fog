@@ -54,7 +54,10 @@
 #include <linux/shmem_fs.h>
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
+<<<<<<< HEAD
 #include <linux/simple_lmk.h>
+=======
+>>>>>>> 83530dad24b1 (Revert "mm: Drop All MGLRU changes.")
 
 #include <asm/tlbflush.h>
 #include <asm/div64.h>
@@ -2920,16 +2923,23 @@ void lru_gen_migrate_mm(struct mm_struct *mm)
 	if (mem_cgroup_disabled())
 		return;
 
+<<<<<<< HEAD
 	/* migration can happen before addition */
 	if (!mm->lru_gen.memcg)
 		return;
 
+=======
+>>>>>>> 83530dad24b1 (Revert "mm: Drop All MGLRU changes.")
 	rcu_read_lock();
 	memcg = mem_cgroup_from_task(mm->owner);
 	rcu_read_unlock();
 	if (memcg == mm->lru_gen.memcg)
 		return;
 
+<<<<<<< HEAD
+=======
+	VM_BUG_ON_MM(!mm->lru_gen.memcg, mm);
+>>>>>>> 83530dad24b1 (Revert "mm: Drop All MGLRU changes.")
 	VM_BUG_ON_MM(list_empty(&mm->lru_gen.list), mm);
 
 	lru_gen_del_mm(mm);
@@ -4125,6 +4135,7 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 	 * younger than min_ttl. However, another theoretical possibility is all
 	 * memcgs are either below min or empty.
 	 */
+<<<<<<< HEAD
 	if (!success) {
 		pr_err("mglru: min_ttl unsatisfied, calling OOM killer\n");
 #ifdef CONFIG_ANDROID_SIMPLE_LMK
@@ -4141,6 +4152,18 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 			mutex_unlock(&oom_lock);
 		}
 #endif
+=======
+	if (!success && !sc->order) {
+		pr_err("mglru: min_ttl unsatisfied, calling OOM killer\n");
+		lru_gen_min_ttl_unsatisfied++;
+		if (mutex_trylock(&oom_lock)) {
+			struct oom_control oc = {
+				.gfp_mask = sc->gfp_mask,
+			};
+			out_of_memory(&oc);
+			mutex_unlock(&oom_lock);
+		}
+>>>>>>> 83530dad24b1 (Revert "mm: Drop All MGLRU changes.")
 	}
 }
 
