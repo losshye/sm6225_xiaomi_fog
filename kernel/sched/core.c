@@ -8806,7 +8806,7 @@ const u32 sched_prio_to_wmult[40] = {
 };
 
 #undef CREATE_TRACE_POINTS
-#ifdef CONFIG_SCHED_WALT
+
 /*
  *@boost:should be 0,1,2.
  *@period:boost time based on ms units.
@@ -8827,6 +8827,8 @@ int set_task_boost(int boost, u64 period)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(set_task_boost);
+
+#ifdef CONFIG_SCHED_WALT
 
 
 /*
