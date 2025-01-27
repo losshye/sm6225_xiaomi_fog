@@ -883,9 +883,10 @@ int core_ctl_set_boost(bool boost)
 			if (!cluster->boost) {
 				ret = -EINVAL;
 				break;
+			} else {
+				--cluster->boost;
+				boost_state_changed = !cluster->boost;
 			}
-			--cluster->boost;
-			boost_state_changed = !cluster->boost;
 		}
 	}
 	spin_unlock_irqrestore(&state_lock, flags);
@@ -1248,7 +1249,6 @@ static int core_ctl_isolation_dead_cpu(unsigned int cpu)
 
 /* ============================ init code ============================== */
 
-#if 0
 static struct cluster_data *find_cluster_by_first_cpu(unsigned int first_cpu)
 {
 	unsigned int i;
@@ -1276,6 +1276,8 @@ static int cluster_init(const struct cpumask *mask)
 	dev = get_cpu_device(first_cpu);
 	if (!dev)
 		return -ENODEV;
+
+	pr_info("Creating CPU group %d\n", first_cpu);
 
 	if (num_clusters == MAX_CLUSTERS) {
 		pr_err("Unsupported number of clusters. Only %u supported\n",
@@ -1306,6 +1308,8 @@ static int cluster_init(const struct cpumask *mask)
 	spin_lock_init(&cluster->pending_lock);
 
 	for_each_cpu(cpu, mask) {
+		pr_info("Init CPU%u state\n", cpu);
+
 		state = &per_cpu(cpu_state, cpu);
 		state->cluster = cluster;
 		state->cpu = cpu;
@@ -1351,4 +1355,3 @@ static int __init core_ctl_init(void)
 }
 
 late_initcall(core_ctl_init);
-#endif
