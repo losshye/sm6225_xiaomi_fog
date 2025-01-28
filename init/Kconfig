@@ -1331,18 +1331,10 @@ config CPUSETS_ASSIST
 	bool "Cpusets configuration helper"
 	depends on CPUSETS
 	depends on ANDROID
+	default y
 	help
 	  This option enables the configuration of default cpusets
 	  parameters from kernel.
-
-	  If unsure, say N.
-
-config CPUSETS_ASSIST
-	bool "Cpuset configuration helper"
-	depends on CPUSETS
-	depends on ANDROID
-	help
-	  This option enables in-kernel overrides for cpuset values.
 
 	  If unsure, say N.
 
