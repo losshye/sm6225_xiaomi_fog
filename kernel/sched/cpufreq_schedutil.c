@@ -13,10 +13,10 @@
 
 #include "sched.h"
 
-#include <linux/binfmts.h>
 #include <linux/sched/cpufreq.h>
 #include <trace/events/power.h>
 #include <linux/sched/sysctl.h>
+#include <linux/binfmts.h>
 
 #define IOWAIT_BOOST_MIN	(SCHED_CAPACITY_SCALE / 8)
 
@@ -61,8 +61,6 @@ struct sugov_cpu {
 
 	unsigned long		util;
 	unsigned long		bw_min;
-
-	/* The field below is for single-CPU policies only: */
 };
 
 static DEFINE_PER_CPU(struct sugov_cpu, sugov_cpu);
@@ -145,7 +143,6 @@ static void sugov_fast_switch(struct sugov_policy *sg_policy, u64 time,
 			      unsigned int next_freq)
 {
 	struct cpufreq_policy *policy = sg_policy->policy;
-	unsigned int cpu __maybe_unused;
 
 	if (!sugov_update_next_freq(sg_policy, time, next_freq))
 		return;
@@ -155,7 +152,6 @@ static void sugov_fast_switch(struct sugov_policy *sg_policy, u64 time,
 		return;
 
 	policy->cur = next_freq;
-
 }
 
 static void sugov_deferred_update(struct sugov_policy *sg_policy, u64 time,
@@ -334,7 +330,7 @@ unsigned long apply_dvfs_headroom(int cpu, unsigned long util)
 
 	if (cpumask_test_cpu(cpu, cpu_lp_mask))
 		headroom = util + (util >> 1);
-	 else
+	else
 		headroom = util + (util >> 2);
 
 	return headroom;
@@ -519,6 +515,7 @@ static void sugov_update_single(struct update_util_data *hook, u64 time,
 	sugov_get_util(sg_cpu, boost);
 
 	next_f = get_next_freq(sg_policy, sg_cpu->util, max_cap);
+
 	/*
 	 * This code runs under rq->lock for the target CPU, so it won't run
 	 * concurrently on two different CPUs for the same target and it is not
@@ -692,7 +689,7 @@ static struct sugov_policy *sugov_policy_alloc(struct cpufreq_policy *policy)
 	return sg_policy;
 }
 
-static inline void sugov_policy_free(struct sugov_policy *sg_policy)
+static void sugov_policy_free(struct sugov_policy *sg_policy)
 {
 	kfree(sg_policy);
 }
@@ -700,7 +697,7 @@ static inline void sugov_policy_free(struct sugov_policy *sg_policy)
 static int sugov_kthread_create(struct sugov_policy *sg_policy)
 {
 	struct task_struct *thread;
-	struct sched_param param = { .sched_priority = MAX_USER_RT_PRIO - 1 };
+	struct sched_param param = { .sched_priority = MAX_USER_RT_PRIO / 2 };
 	struct cpufreq_policy *policy = sg_policy->policy;
 	int ret;
 
@@ -961,4 +958,4 @@ static int __init sugov_register(void)
 {
 	return cpufreq_register_governor(&schedutil_gov);
 }
-core_initcall(sugov_register);
+fs_initcall(sugov_register);

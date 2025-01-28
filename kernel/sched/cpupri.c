@@ -82,8 +82,6 @@ static inline int __cpupri_find(struct cpupri *cp, struct task_struct *p,
 
 	if (lowest_mask) {
 		cpumask_and(lowest_mask, &p->cpus_allowed, vec->mask);
-		cpumask_andnot(lowest_mask, lowest_mask,
-			       cpu_isolated_mask);
 		cpumask_and(lowest_mask, lowest_mask, cpu_active_mask);
 		/*
 		 * We have to ensure that we have at least one bit
@@ -111,8 +109,6 @@ int cpupri_find(struct cpupri *cp, struct task_struct *p,
  * @cp: The cpupri context
  * @p: The task
  * @lowest_mask: A mask to fill in with selected CPUs (or NULL)
- * @fitness_fn: A pointer to a function to do custom checks whether the CPU
- *              fits a specific criteria so that we only return those CPUs.
  *
  * Note: This function returns the recommended CPUs as calculated during the
  * current invocation.  By the time the call returns, the CPUs may have in

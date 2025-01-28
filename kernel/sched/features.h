@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
-#define SCHED_FEAT_ENFORCE_ELIGIBILITY 1
+#define SCHED_FEAT_ENFORCE_ELIGIBILITY 0
 /*
  * Using the avg_vruntime, do the right thing and preserve lag across
  * sleep+wake cycles. EEVDF placement strategy #1, #2 if disabled.
@@ -9,29 +9,19 @@
 /*
  * Give new tasks half a slice to ease into the competition.
  */
-#define SCHED_FEAT_PLACE_DEADLINE_INITIAL 1
+#define SCHED_FEAT_PLACE_DEADLINE_INITIAL 0
 /*
  * Inhibit (wakeup) preemption until the current task has either matched the
  * 0-lag point or until is has exhausted it's slice.
  */
-#define SCHED_FEAT_RUN_TO_PARITY 1
-
-/*
- * Allow tasks with a shorter slice to disregard RUN_TO_PARITY
- */
-#define SCHED_FEAT_PREEMPT_SHORT 1
-
-/*
- * Allow tasks with a shorter slice to disregard RUN_TO_PARITY
- */
-#define SCHED_FEAT_PREEMPT_SHORT 1
+#define SCHED_FEAT_RUN_TO_PARITY 0
 
 /*
  * Prefer to schedule the task we woke last (assuming it failed
  * wakeup-preemption), since its likely going to consume data we
  * touched, increases cache locality.
  */
-#define SCHED_FEAT_NEXT_BUDDY 1
+#define SCHED_FEAT_NEXT_BUDDY 0
 
 /*
  * Consider buddies to be cache hot, decreases the likeliness of a
@@ -46,12 +36,11 @@
 
 #define SCHED_FEAT_HRTICK 0
 #define SCHED_FEAT_DOUBLE_TICK 0
-#define SCHED_FEAT_LB_BIAS 1
 
 /*
  * Decrement CPU capacity based on time not spent running tasks
  */
-#define SCHED_FEAT_NONTASK_CAPACITY 0
+#define SCHED_FEAT_NONTASK_CAPACITY 1
 
 /*
  * Queue remote wakeups on the target CPU and process them
@@ -103,7 +92,7 @@
 /*
  * Fast pre-selection of CPU candidates for EAS.
  */
-#define SCHED_FEAT_FIND_BEST_TARGET 1
+#define SCHED_FEAT_FIND_BEST_TARGET 0
 
 /*
  * Energy aware scheduling algorithm choices:

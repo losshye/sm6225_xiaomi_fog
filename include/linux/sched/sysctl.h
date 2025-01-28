@@ -29,13 +29,13 @@ extern unsigned int sysctl_sched_min_granularity;
 extern unsigned int sysctl_sched_sync_hint_enable;
 extern unsigned int sysctl_sched_cstate_aware;
 #ifdef CONFIG_SCHED_WALT
+extern unsigned int sysctl_sched_force_lb_enable;
 extern unsigned int sysctl_sched_capacity_margin_up[MAX_MARGIN_LEVELS];
 extern unsigned int sysctl_sched_capacity_margin_down[MAX_MARGIN_LEVELS];
 extern unsigned int sysctl_sched_user_hint;
 extern const int sched_user_hint_max;
 extern unsigned int sysctl_sched_cpu_high_irqload;
 extern unsigned int sysctl_sched_boost;
-extern unsigned int sysctl_sched_force_lb_enable;
 extern unsigned int sysctl_sched_group_upmigrate_pct;
 extern unsigned int sysctl_sched_group_downmigrate_pct;
 extern unsigned int sysctl_sched_conservative_pl;
@@ -106,14 +106,14 @@ extern unsigned int sysctl_numa_balancing_scan_period_min;
 extern unsigned int sysctl_numa_balancing_scan_period_max;
 extern unsigned int sysctl_numa_balancing_scan_size;
 
-extern __read_mostly unsigned int sysctl_sched_migration_cost;
 #ifdef CONFIG_SCHED_DEBUG
+extern __read_mostly unsigned int sysctl_sched_migration_cost;
 extern __read_mostly unsigned int sysctl_sched_nr_migrate;
-#endif
 
 int sched_proc_update_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *length,
 		loff_t *ppos);
+#endif
 
 extern int sched_boost_handler(struct ctl_table *table, int write,
 			void __user *buffer, size_t *lenp, loff_t *ppos);
@@ -125,9 +125,6 @@ extern int sched_boost_handler(struct ctl_table *table, int write,
  */
 extern unsigned int sysctl_sched_rt_period;
 extern int sysctl_sched_rt_runtime;
-
-extern unsigned int sysctl_sched_dl_period_max;
-extern unsigned int sysctl_sched_dl_period_min;
 
 #ifdef CONFIG_UCLAMP_TASK
 extern unsigned int sysctl_sched_uclamp_util_min;

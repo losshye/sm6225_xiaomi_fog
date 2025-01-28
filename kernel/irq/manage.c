@@ -24,6 +24,12 @@
 
 #include "internals.h"
 
+struct irq_desc_list {
+	struct list_head list;
+	struct irq_desc *desc;
+	unsigned int perf_flag;
+};
+
 static LIST_HEAD(perf_crit_irqs);
 static DEFINE_RAW_SPINLOCK(perf_irqs_lock);
 static int perf_cpu_index = -1;
@@ -1272,6 +1278,19 @@ setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary)
 	return 0;
 }
 
+static void add_desc_to_perf_list(struct irq_desc *desc, unsigned int perf_flag)
+{
+	struct irq_desc_list *item;
+
+	item = kmalloc(sizeof(*item), GFP_ATOMIC | __GFP_NOFAIL);
+	item->desc = desc;
+	item->perf_flag = perf_flag;
+
+	raw_spin_lock(&perf_irqs_lock);
+	list_add(&item->list, &perf_crit_irqs);
+	raw_spin_unlock(&perf_irqs_lock);
+}
+
 static void affine_one_perf_thread(struct irqaction *action)
 {
 	const struct cpumask *mask;
@@ -1331,8 +1350,8 @@ static void affine_one_perf_irq(struct irq_desc *desc, unsigned int perf_flag)
 
 void setup_perf_irq_locked(struct irq_desc *desc, unsigned int perf_flag)
 {
+	add_desc_to_perf_list(desc, perf_flag);
 	raw_spin_lock(&perf_irqs_lock);
-	list_add(&desc->perf_list, &perf_crit_irqs);
 	affine_one_perf_irq(desc, perf_flag);
 	raw_spin_unlock(&perf_irqs_lock);
 }
@@ -1358,12 +1377,14 @@ void irq_set_perf_affinity(unsigned int irq, unsigned int perf_flag)
 
 void unaffine_perf_irqs(void)
 {
-	struct irq_desc *desc;
+	struct irq_desc_list *data;
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&perf_irqs_lock, flags);
 	perf_crit_suspended = true;
-	list_for_each_entry(desc, &perf_crit_irqs, perf_list) {
+	list_for_each_entry(data, &perf_crit_irqs, list) {
+		struct irq_desc *desc = data->desc;
+
 		raw_spin_lock(&desc->lock);
 		irq_set_affinity_locked(&desc->irq_data, cpu_all_mask, true);
 		unaffine_one_perf_thread(desc->action);
@@ -1374,7 +1395,7 @@ void unaffine_perf_irqs(void)
 
 void reaffine_perf_irqs(bool from_hotplug)
 {
-	struct irq_desc *desc;
+	struct irq_desc_list *data;
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&perf_irqs_lock, flags);
@@ -1383,9 +1404,11 @@ void reaffine_perf_irqs(bool from_hotplug)
 		perf_crit_suspended = false;
 		perf_cpu_index = -1;
 		lp_cpu_index = -1;
-		list_for_each_entry(desc, &perf_crit_irqs, perf_list) {
+		list_for_each_entry(data, &perf_crit_irqs, list) {
+			struct irq_desc *desc = data->desc;
+
 			raw_spin_lock(&desc->lock);
-			affine_one_perf_irq(desc, desc->action->flags);
+			affine_one_perf_irq(desc, data->perf_flag);
 			affine_one_perf_thread(desc->action);
 			raw_spin_unlock(&desc->lock);
 		}
@@ -1833,8 +1856,16 @@ static struct irqaction *__free_irq(struct irq_desc *desc, void *dev_id)
 	}
 
 	if (irqd_has_set(&desc->irq_data, IRQD_PERF_CRITICAL)) {
+		struct irq_desc_list *data;
+
 		raw_spin_lock(&perf_irqs_lock);
-		list_del(&desc->perf_list);
+		list_for_each_entry(data, &perf_crit_irqs, list) {
+			if (data->desc == desc) {
+				list_del(&data->list);
+				kfree(data);
+				break;
+			}
+		}
 		raw_spin_unlock(&perf_irqs_lock);
 	}
 

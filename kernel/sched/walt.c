@@ -202,16 +202,31 @@ early_param("sched_predl", set_sched_predl);
 __read_mostly unsigned int walt_scale_demand_divisor;
 #define scale_demand(d) ((d)/walt_scale_demand_divisor)
 
+static inline void walt_irq_work_queue(struct irq_work *work)
+{
+	if (likely(cpu_online(raw_smp_processor_id())))
+		irq_work_queue(work);
+	else
+		irq_work_queue_on(work, cpumask_any(cpu_online_mask));
+}
+
 void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
 {
 	inc_nr_big_task(&rq->walt_stats, p);
 	walt_inc_cumulative_runnable_avg(rq, p);
+
+	p->rtg_high_prio = task_rtg_high_prio(p);
+	if (p->rtg_high_prio)
+		rq->walt_stats.nr_rtg_high_prio_tasks++;
+
 }
 
 void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
 {
 	dec_nr_big_task(&rq->walt_stats, p);
 	walt_dec_cumulative_runnable_avg(rq, p);
+	if (p->rtg_high_prio)
+		rq->walt_stats.nr_rtg_high_prio_tasks--;
 }
 
 void fixup_walt_sched_stats_common(struct rq *rq, struct task_struct *p,
@@ -401,10 +416,10 @@ void clear_walt_request(int cpu)
 
 		raw_spin_lock_irqsave(&rq->lock, flags);
 		if (rq->push_task) {
+			clear_reserved(rq->push_cpu);
 			push_task = rq->push_task;
 			rq->push_task = NULL;
 		}
-		clear_reserved(rq->push_cpu);
 		rq->active_balance = 0;
 		raw_spin_unlock_irqrestore(&rq->lock, flags);
 		if (push_task)
@@ -743,7 +758,7 @@ static inline void inter_cluster_migration_fixup
 	dest_rq->prev_runnable_sum += p->ravg.prev_window;
 
 	if (src_rq->curr_runnable_sum < p->ravg.curr_window_cpu[task_cpu]) {
-		printk_deferred("WALT-BUG pid=%u CPU%d -> CPU%d src_crs=%llu is lesser than task_contrib=%u",
+		printk_deferred("WALT-BUG pid=%u CPU%d -> CPU%d src_crs=%llu is lesser than task_contrib=%llu",
 			p->pid, src_rq->cpu, dest_rq->cpu,
 			src_rq->curr_runnable_sum,
 			p->ravg.curr_window_cpu[task_cpu]);
@@ -753,7 +768,7 @@ static inline void inter_cluster_migration_fixup
 	src_rq->curr_runnable_sum -= p->ravg.curr_window_cpu[task_cpu];
 
 	if (src_rq->prev_runnable_sum < p->ravg.prev_window_cpu[task_cpu]) {
-		printk_deferred("WALT-BUG pid=%u CPU%d -> CPU%d src_prs=%llu is lesser than task_contrib=%u",
+		printk_deferred("WALT-BUG pid=%u CPU%d -> CPU%d src_prs=%llu is lesser than task_contrib=%llu",
 			p->pid, src_rq->cpu, dest_rq->cpu,
 			src_rq->prev_runnable_sum,
 			p->ravg.prev_window_cpu[task_cpu]);
@@ -768,7 +783,7 @@ static inline void inter_cluster_migration_fixup
 
 		if (src_rq->nt_curr_runnable_sum <
 				p->ravg.curr_window_cpu[task_cpu]) {
-			printk_deferred("WALT-BUG pid=%u CPU%d -> CPU%d src_nt_crs=%llu is lesser than task_contrib=%u",
+			printk_deferred("WALT-BUG pid=%u CPU%d -> CPU%d src_nt_crs=%llu is lesser than task_contrib=%llu",
 				p->pid, src_rq->cpu, dest_rq->cpu,
 				src_rq->nt_curr_runnable_sum,
 				p->ravg.curr_window_cpu[task_cpu]);
@@ -779,7 +794,7 @@ static inline void inter_cluster_migration_fixup
 				p->ravg.curr_window_cpu[task_cpu];
 		if (src_rq->nt_prev_runnable_sum <
 				p->ravg.prev_window_cpu[task_cpu]) {
-			printk_deferred("WALT-BUG pid=%u CPU%d -> CPU%d src_nt_prs=%llu is lesser than task_contrib=%u",
+			printk_deferred("WALT-BUG pid=%u CPU%d -> CPU%d src_nt_prs=%llu is lesser than task_contrib=%llu",
 				p->pid, src_rq->cpu, dest_rq->cpu,
 				src_rq->nt_prev_runnable_sum,
 				p->ravg.prev_window_cpu[task_cpu]);
@@ -2135,6 +2150,11 @@ void init_new_task_load(struct task_struct *p)
 	memset(&p->ravg, 0, sizeof(struct ravg));
 	p->cpu_cycles = 0;
 
+	p->ravg.curr_window_cpu = kcalloc(nr_cpu_ids, sizeof(u32),
+					  GFP_KERNEL | __GFP_NOFAIL);
+	p->ravg.prev_window_cpu = kcalloc(nr_cpu_ids, sizeof(u32),
+					  GFP_KERNEL | __GFP_NOFAIL);
+
 	if (init_load_pct) {
 		init_load_windows = div64_u64((u64)init_load_pct *
 			  (u64)sched_ravg_window, 100);
@@ -2152,28 +2172,46 @@ void init_new_task_load(struct task_struct *p)
 	p->unfilter = sysctl_sched_task_unfilter_period;
 }
 
+/*
+ * kfree() may wakeup kswapd. So this function should NOT be called
+ * with any CPU's rq->lock acquired.
+ */
+void free_task_load_ptrs(struct task_struct *p)
+{
+	kfree(p->ravg.curr_window_cpu);
+	kfree(p->ravg.prev_window_cpu);
+
+	/*
+	 * update_task_ravg() can be called for exiting tasks. While the
+	 * function itself ensures correct behavior, the corresponding
+	 * trace event requires that these pointers be NULL.
+	 */
+	p->ravg.curr_window_cpu = NULL;
+	p->ravg.prev_window_cpu = NULL;
+}
+
 void reset_task_stats(struct task_struct *p)
 {
-	u32 sum;
-	u32 curr_window_saved[CONFIG_NR_CPUS];
-	u32 prev_window_saved[CONFIG_NR_CPUS];
+	u32 sum = 0;
+	u32 *curr_window_ptr = NULL;
+	u32 *prev_window_ptr = NULL;
 
 	if (exiting_task(p)) {
 		sum = EXITING_TASK_MARKER;
-
-		memset(&p->ravg, 0, sizeof(struct ravg));
-
-		/* Retain EXITING_TASK marker */
-		p->ravg.sum_history[0] = sum;
 	} else {
-		memcpy(curr_window_saved, p->ravg.curr_window_cpu, sizeof(curr_window_saved));
-		memcpy(prev_window_saved, p->ravg.prev_window_cpu, sizeof(prev_window_saved));
-
-		memset(&p->ravg, 0, sizeof(struct ravg));
-
-		memcpy(p->ravg.curr_window_cpu, curr_window_saved, sizeof(curr_window_saved));
-		memcpy(p->ravg.prev_window_cpu, prev_window_saved, sizeof(prev_window_saved));
+		curr_window_ptr =  p->ravg.curr_window_cpu;
+		prev_window_ptr = p->ravg.prev_window_cpu;
+		memset(curr_window_ptr, 0, sizeof(u32) * nr_cpu_ids);
+		memset(prev_window_ptr, 0, sizeof(u32) * nr_cpu_ids);
 	}
+
+	memset(&p->ravg, 0, sizeof(struct ravg));
+
+	p->ravg.curr_window_cpu = curr_window_ptr;
+	p->ravg.prev_window_cpu = prev_window_ptr;
+
+	/* Retain EXITING_TASK marker */
+	p->ravg.sum_history[0] = sum;
 }
 
 void mark_task_starting(struct task_struct *p)
@@ -2270,9 +2308,7 @@ static struct sched_cluster *alloc_new_cluster(const struct cpumask *cpus)
 
 	cluster = kzalloc(sizeof(struct sched_cluster), GFP_ATOMIC);
 	if (!cluster) {
-#ifdef CONFIG_BUG
 		__WARN_printf("Cluster allocation failed. Possible bad scheduling\n");
-#endif
 		return NULL;
 	}
 
@@ -2617,6 +2653,7 @@ int register_cpu_cycle_counter_cb(struct cpu_cycle_counter_cb *cb)
 				    CPUFREQ_TRANSITION_NOTIFIER);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(register_cpu_cycle_counter_cb);
 
 static void transfer_busy_time(struct rq *rq, struct related_thread_group *grp,
 				struct task_struct *p, int event);
@@ -3103,6 +3140,7 @@ void sched_update_cpu_freq_min_max(const cpumask_t *cpus, u32 fmin, u32 fmax)
 	if (update_capacity)
 		walt_cpus_capacity_changed(cpus);
 }
+EXPORT_SYMBOL_GPL(sched_update_cpu_freq_min_max);
 
 void note_task_waking(struct task_struct *p, u64 wallclock)
 {
@@ -3152,7 +3190,7 @@ static void transfer_busy_time(struct rq *rq, struct related_thread_group *grp,
 		dst_nt_prev_runnable_sum = &cpu_time->nt_prev_runnable_sum;
 
 		if (*src_curr_runnable_sum < p->ravg.curr_window_cpu[cpu]) {
-			printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_crs=%llu is lesser than task_contrib=%u",
+			printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_crs=%llu is lesser than task_contrib=%llu",
 				p->pid, cpu, event, *src_curr_runnable_sum,
 				p->ravg.curr_window_cpu[cpu]);
 			walt_task_dump(p);
@@ -3161,7 +3199,7 @@ static void transfer_busy_time(struct rq *rq, struct related_thread_group *grp,
 		*src_curr_runnable_sum -= p->ravg.curr_window_cpu[cpu];
 
 		if (*src_prev_runnable_sum < p->ravg.prev_window_cpu[cpu]) {
-			printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_prs=%llu is lesser than task_contrib=%u",
+			printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_prs=%llu is lesser than task_contrib=%llu",
 				p->pid, cpu, event, *src_prev_runnable_sum,
 				p->ravg.prev_window_cpu[cpu]);
 			walt_task_dump(p);
@@ -3172,7 +3210,7 @@ static void transfer_busy_time(struct rq *rq, struct related_thread_group *grp,
 		if (new_task) {
 			if (*src_nt_curr_runnable_sum <
 					p->ravg.curr_window_cpu[cpu]) {
-				printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_nt_crs=%llu is lesser than task_contrib=%u",
+				printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_nt_crs=%llu is lesser than task_contrib=%llu",
 					p->pid, cpu, event,
 					*src_nt_curr_runnable_sum,
 					p->ravg.curr_window_cpu[cpu]);
@@ -3184,7 +3222,7 @@ static void transfer_busy_time(struct rq *rq, struct related_thread_group *grp,
 
 			if (*src_nt_prev_runnable_sum <
 					p->ravg.prev_window_cpu[cpu]) {
-				printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_nt_prs=%llu is lesser than task_contrib=%u",
+				printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_nt_prs=%llu is lesser than task_contrib=%llu",
 					p->pid, cpu, event,
 					*src_nt_prev_runnable_sum,
 					p->ravg.prev_window_cpu[cpu]);
@@ -3212,7 +3250,7 @@ static void transfer_busy_time(struct rq *rq, struct related_thread_group *grp,
 		dst_nt_prev_runnable_sum = &rq->nt_prev_runnable_sum;
 
 		if (*src_curr_runnable_sum < p->ravg.curr_window) {
-			printk_deferred("WALT-UG pid=%u CPU=%d event=%d src_crs=%llu is lesser than task_contrib=%u",
+			printk_deferred("WALT-UG pid=%u CPU=%d event=%d src_crs=%llu is lesser than task_contrib=%llu",
 				p->pid, cpu, event, *src_curr_runnable_sum,
 				p->ravg.curr_window);
 			walt_task_dump(p);
@@ -3221,7 +3259,7 @@ static void transfer_busy_time(struct rq *rq, struct related_thread_group *grp,
 		*src_curr_runnable_sum -= p->ravg.curr_window;
 
 		if (*src_prev_runnable_sum < p->ravg.prev_window) {
-			printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_prs=%llu is lesser than task_contrib=%u",
+			printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_prs=%llu is lesser than task_contrib=%llu",
 				p->pid, cpu, event, *src_prev_runnable_sum,
 				p->ravg.prev_window);
 			walt_task_dump(p);
@@ -3231,7 +3269,7 @@ static void transfer_busy_time(struct rq *rq, struct related_thread_group *grp,
 
 		if (new_task) {
 			if (*src_nt_curr_runnable_sum < p->ravg.curr_window) {
-				printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_nt_crs=%llu is lesser than task_contrib=%u",
+				printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_nt_crs=%llu is lesser than task_contrib=%llu",
 					p->pid, cpu, event,
 					*src_nt_curr_runnable_sum,
 					p->ravg.curr_window);
@@ -3241,7 +3279,7 @@ static void transfer_busy_time(struct rq *rq, struct related_thread_group *grp,
 			*src_nt_curr_runnable_sum -= p->ravg.curr_window;
 
 			if (*src_nt_prev_runnable_sum < p->ravg.prev_window) {
-				printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_nt_prs=%llu is lesser than task_contrib=%u",
+				printk_deferred("WALT-BUG pid=%u CPU=%d event=%d src_nt_prs=%llu is lesser than task_contrib=%llu",
 					p->pid, cpu, event,
 					*src_nt_prev_runnable_sum,
 					p->ravg.prev_window);
@@ -3433,7 +3471,7 @@ void walt_irq_work(struct irq_work *irq_work)
 		if ((sched_ravg_window != new_sched_ravg_window) &&
 		    (wc < this_rq()->window_start + new_sched_ravg_window)) {
 			sched_ravg_window_change_time = sched_ktime_clock();
-			printk_deferred("ALERT: changing window size from %u to %u at %llu\n",
+			printk_deferred("ALERT: changing window size from %u to %u at %lu\n",
 					sched_ravg_window,
 					new_sched_ravg_window,
 					sched_ravg_window_change_time);

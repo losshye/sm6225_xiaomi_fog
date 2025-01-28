@@ -198,7 +198,6 @@ void generic_smp_call_function_single_interrupt(void)
 	flush_smp_call_function_queue(true);
 }
 
-extern void sched_ttwu_pending(void *);
 extern void irq_work_single(void *);
 
 /**
@@ -406,7 +405,7 @@ int smp_call_function_single_async(int cpu, struct __call_single_data *csd)
 {
 	int err = 0;
 
-	migrate_disable();
+	preempt_disable();
 
 	/* We could deadlock if we have to wait here with interrupts disabled! */
 	if (WARN_ON_ONCE(csd->flags & CSD_FLAG_LOCK))
@@ -416,7 +415,7 @@ int smp_call_function_single_async(int cpu, struct __call_single_data *csd)
 	smp_wmb();
 
 	err = generic_exec_single(cpu, csd);
-	migrate_enable();
+	preempt_enable();
 
 	return err;
 }
@@ -865,12 +864,13 @@ void wake_up_all_idle_cpus(void)
 {
 	int cpu;
 
-	for_each_possible_cpu(cpu) {
-		preempt_disable();
-		if (cpu != smp_processor_id() && cpu_online(cpu))
-			wake_up_if_idle(cpu);
-		preempt_enable();
+	preempt_disable();
+	for_each_online_cpu(cpu) {
+		if (cpu == smp_processor_id())
+			continue;
+		wake_up_if_idle(cpu);
 	}
+	preempt_enable();
 }
 EXPORT_SYMBOL_GPL(wake_up_all_idle_cpus);
 
@@ -920,7 +920,6 @@ int smp_call_on_cpu(unsigned int cpu, int (*func)(void *), void *par, bool phys)
 
 	queue_work_on(cpu, system_wq, &sscs.work);
 	wait_for_completion(&sscs.done);
-	destroy_work_on_stack(&sscs.work);
 
 	return sscs.ret;
 }

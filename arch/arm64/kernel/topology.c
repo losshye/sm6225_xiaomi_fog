@@ -31,16 +31,6 @@
 #include <asm/cputype.h>
 #include <asm/topology.h>
 
-/*
- * This function returns the logic cpu number of the node.
- * There are basically three kinds of return values:
- * (1) logic cpu number which is > 0.
- * (2) -ENODEV when the device tree(DT) node is valid and found in the DT but
- * there is no possible logical CPU in the kernel to match. This happens
- * when CONFIG_NR_CPUS is configure to be smaller than the number of
- * CPU nodes in DT. We need to just ignore this case.
- * (3) -1 if the node does not exist in the device tree
- */
 static int __init get_cpu_for_node(struct device_node *node)
 {
 	struct device_node *cpu_node;
@@ -54,8 +44,8 @@ static int __init get_cpu_for_node(struct device_node *node)
 	if (cpu >= 0)
 		topology_parse_cpu_capacity(cpu_node, cpu);
 	else
-		pr_info("CPU node for %pOF exist but the possible cpu range is :%*pbl\n",
-			cpu_node, cpumask_pr_args(cpu_possible_mask));
+		pr_crit("Unable to find CPU node for %pOF\n", cpu_node);
+
 	of_node_put(cpu_node);
 	return cpu;
 }
@@ -77,10 +67,9 @@ static int __init parse_core(struct device_node *core, int package_id,
 			cpu = get_cpu_for_node(t);
 			if (cpu >= 0) {
 				cpu_topology[cpu].package_id = package_id;
-				cpu_topology[cpu].cluster_id = package_id;
 				cpu_topology[cpu].core_id = core_id;
 				cpu_topology[cpu].thread_id = i;
-			} else if (cpu != -ENODEV) {
+			} else {
 				pr_err("%pOF: Can't get CPU for thread\n",
 				       t);
 				of_node_put(t);
@@ -100,9 +89,8 @@ static int __init parse_core(struct device_node *core, int package_id,
 		}
 
 		cpu_topology[cpu].package_id = package_id;
-		cpu_topology[cpu].cluster_id = package_id;
 		cpu_topology[cpu].core_id = core_id;
-	} else if (leaf && cpu != -ENODEV) {
+	} else if (leaf) {
 		pr_err("%pOF: Can't get CPU for leaf core\n", core);
 		return -EINVAL;
 	}
@@ -242,11 +230,7 @@ const struct cpumask *cpu_coregroup_mask(int cpu)
 	return core_mask;
 }
 
-const struct cpumask *cpu_clustergroup_mask(int cpu)
-{
-	return &cpu_topology[cpu].cluster_sibling;
-}
-
+#ifdef CONFIG_SCHED_WALT
 static void update_possible_siblings_masks(unsigned int cpuid)
 {
 	struct cpu_topology *cpu_topo, *cpuid_topo = &cpu_topology[cpuid];
@@ -264,6 +248,7 @@ static void update_possible_siblings_masks(unsigned int cpuid)
 		cpumask_set_cpu(cpu, &cpuid_topo->core_possible_sibling);
 	}
 }
+#endif
 
 static void update_siblings_masks(unsigned int cpuid)
 {
@@ -281,12 +266,6 @@ static void update_siblings_masks(unsigned int cpuid)
 
 		if (cpuid_topo->package_id != cpu_topo->package_id)
 			continue;
-
-		if (cpuid_topo->cluster_id == cpu_topo->cluster_id &&
-		    cpuid_topo->cluster_id != -1) {
-			cpumask_set_cpu(cpu, &cpuid_topo->cluster_sibling);
-			cpumask_set_cpu(cpuid, &cpu_topo->cluster_sibling);
-		}
 
 		cpumask_set_cpu(cpuid, &cpu_topo->core_sibling);
 		cpumask_set_cpu(cpu, &cpuid_topo->core_sibling);
@@ -330,7 +309,6 @@ void store_cpu_topology(unsigned int cpuid)
 	cpuid_topo->thread_id  = -1;
 	cpuid_topo->core_id    = cpuid;
 	cpuid_topo->package_id = cpu_to_node(cpuid);
-	cpuid_topo->cluster_id = cpuid_topo->package_id;
 
 	pr_debug("CPU%u: cluster %d core %d thread %d mpidr %#016llx\n",
 		 cpuid, cpuid_topo->package_id, cpuid_topo->core_id,
@@ -347,9 +325,6 @@ static void clear_cpu_topology(int cpu)
 	cpumask_clear(&cpu_topo->llc_sibling);
 	cpumask_set_cpu(cpu, &cpu_topo->llc_sibling);
 
-	cpumask_clear(&cpu_topo->cluster_sibling);
-	cpumask_set_cpu(cpu, &cpu_topo->cluster_sibling);
-
 	cpumask_clear(&cpu_topo->core_sibling);
 	cpumask_set_cpu(cpu, &cpu_topo->core_sibling);
 	cpumask_clear(&cpu_topo->thread_sibling);
@@ -365,7 +340,6 @@ static void __init reset_cpu_topology(void)
 
 		cpu_topo->thread_id = -1;
 		cpu_topo->core_id = 0;
-		cpu_topo->cluster_id = -1;
 		cpu_topo->package_id = -1;
 		cpu_topo->llc_id = -1;
 
@@ -425,11 +399,8 @@ static int __init parse_acpi_topology(void)
 			cpu_topology[cpu].thread_id  = -1;
 			cpu_topology[cpu].core_id    = topology_id;
 		}
-		topology_id = find_acpi_cpu_topology_cluster(cpu);
-		cpu_topology[cpu].cluster_id = topology_id;
 		topology_id = find_acpi_cpu_topology_package(cpu);
 		cpu_topology[cpu].package_id = topology_id;
-		cpu_topology[cpu].cluster_id = topology_id;
 
 		i = acpi_find_last_cache_level(cpu);
 
@@ -456,8 +427,6 @@ static inline int __init parse_acpi_topology(void)
 
 void __init init_cpu_topology(void)
 {
-	int cpu;
-
 	reset_cpu_topology();
 
 	/*
@@ -468,8 +437,12 @@ void __init init_cpu_topology(void)
 		reset_cpu_topology();
 	else if (of_have_populated_dt() && parse_dt_topology())
 		reset_cpu_topology();
+#ifdef CONFIG_SCHED_WALT
 	else {
+		int cpu;
+
 		for_each_possible_cpu(cpu)
 			update_possible_siblings_masks(cpu);
 	}
+#endif
 }
