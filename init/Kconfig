@@ -50,9 +50,6 @@ config LLD_VERSION
 config CC_HAS_ASM_GOTO
 	def_bool $(success,$(srctree)/scripts/gcc-goto.sh $(CC))
 
-config TOOLS_SUPPORT_RELR
-	def_bool $(success,env "CC=$(CC)" "LD=$(LD)" "NM=$(NM)" "OBJCOPY=$(OBJCOPY)" $(srctree)/scripts/tools-support-relr.sh)
-
 config CONSTRUCTORS
 	bool
 	depends on !UML
@@ -145,6 +142,17 @@ config BUILD_SALT
           This is mostly useful for distributions which want to ensure the
           build is unique between builds. It's safe to leave the default.
 
+config INLINE_OPTIMIZATION
+	bool "Optimize compiler inlining"
+	default n
+	help
+	  Inlining functions in the hot-path can help improve performance,
+	  while also increasing the final size of the kernel image. Setting
+	  this option informs the compiler to optimize inlining. Whether to
+	  inline for performance or reduced size is controlled via the
+	  optimize for size (CC_OPTIMIZE_FOR_SIZE) or optimize for
+	  performance (CC_OPTIMIZE_FOR_PERFORMANCE) configs.
+
 config POLLY_CLANG
 	bool "Use Clang Polly optimizations"
 	default y
@@ -158,22 +166,6 @@ config POLLY_CLANG
 	  from Polly's website:
 
 	  https://polly.llvm.org
-
-menuconfig UNAME_OVERRIDE
-	bool "Override uname output for specific processes"
-	help
-	  This will modify struct new_utsname->release string's return value
-	  to another string on a specified process.
-
-if UNAME_OVERRIDE
-
-config UNAME_OVERRIDE_TARGET
-	string "Target process' cmdline for uname override"
-
-config UNAME_OVERRIDE_STRING
-	string "New uname's release string for uname override"
-
-endif
 
 config HAVE_KERNEL_GZIP
 	bool
@@ -822,7 +814,7 @@ menu "FAIR Scheuler tunables"
 
 choice
 	prompt "Utilization's PELT half-Life"
-	default PELT_UTIL_HALFLIFE_16
+	default PELT_UTIL_HALFLIFE_32
 	help
 	  Allows choosing one of the possible values for the PELT half-life to
 	  be used for the update of the utilization of tasks and CPUs.
@@ -858,7 +850,7 @@ config PELT_COMPATIBILITY_LAYER
 	  This option enables a non-operational compatibility layer for use in
 	  lieu of Window Assisted Load Tracking on systems which expect it.
 
-	  If unsure, say N.	  
+	  If unsure, say N.
 
 endmenu # FAIR Scheduler tunables"
 
@@ -1321,22 +1313,19 @@ config SCHED_TUNE
 
 	  If unsure, say N.
 
+config STUNE_ASSIST
+	bool "SchedTune configuration helper"
+	depends on SCHED_TUNE
+	depends on ANDROID
+	help
+	  This option enables in-kernel overrides for SchedTune values.
+          If unsure, say N.
+
 config UCLAMP_ASSIST
 	bool "UClamp configuration helper"
 	depends on ANDROID && UCLAMP_TASK && UCLAMP_TASK_GROUP
 	help
 	  This option enabled in-kernel uclamp setting overrides
-
-config CPUSETS_ASSIST
-	bool "Cpusets configuration helper"
-	depends on CPUSETS
-	depends on ANDROID
-	default y
-	help
-	  This option enables the configuration of default cpusets
-	  parameters from kernel.
-
-	  If unsure, say N.
 
 config RT_SOFTIRQ_AWARE_SCHED
 	bool "Improve RT scheduling during long softirq execution"
@@ -1347,6 +1336,67 @@ config RT_SOFTIRQ_AWARE_SCHED
 	  occupied by nonpreemptible tasks, such as a long softirq or CPUs
 	  which may soon block preemptions, such as a CPU running a ksoftirq
 	  thread which handles slow softirqs.
+
+config CPUSET_ASSIST
+	bool "Cpuset configuration helper"
+	depends on CPUSETS
+	depends on ANDROID
+	help
+	  This option enables in-kernel overrides for cpuset values.
+
+	  If unsure, say N.
+
+if CPUSET_ASSIST
+
+config CPUSET_AUDIO_APP
+	string "Value for 'audio-app' cpuset"
+	default "1-2"
+	help
+	  The CPU mask to use for the audio-app cpuset.
+
+config CPUSET_BG
+	string "Value for 'background' cpuset"
+	default "0-3"
+	help
+	  The CPU mask to use for the background cpuset.
+
+config CPUSET_CAMERA
+	string "Value for 'camera-daemon' cpuset"
+	default "0-7"
+	help
+	  The CPU mask to use for the camera-daemon cpuset.
+
+config CPUSET_DISPLAY
+	string "Value for 'display' cpuset"
+	default "4-7"
+	help
+	  The CPU mask to use for the display cpuset.
+
+config CPUSET_FG
+	string "Value for 'foreground' cpuset"
+	default "0-6"
+	help
+	  The CPU mask to use for the foreground cpuset.
+
+config CPUSET_RESTRICTED
+	string "Value for 'restricted' cpuset"
+	default "0-7"
+	help
+	  The CPU mask to use for the restricted cpuset.
+
+config CPUSET_SYSTEM_BG
+	string "Value for 'system-background' cpuset"
+	default "0-3"
+	help
+	  The CPU mask to use for the system-background cpuset.
+
+config CPUSET_TOP_APP
+	string "Value for 'top-app' cpuset"
+	default "0-7"
+	help
+	  The CPU mask to use for the top-app cpuset.
+
+endif
 
 config SYSFS_DEPRECATED
 	bool "Enable deprecated sysfs features to support old userspace tools"
@@ -1421,8 +1471,7 @@ endif
 
 choice
 	prompt "Compiler optimization level"
-	default CC_OPTIMIZE_FOR_PERFORMANCE_O3 if (GCC_VERSION >= 100000 || CC_IS_CLANG)
-	default CC_OPTIMIZE_FOR_PERFORMANCE if GCC_VERSION < 100000
+	default CC_OPTIMIZE_FOR_PERFORMANCE
 
 config CC_OPTIMIZE_FOR_PERFORMANCE
 	bool "Optimize for performance"
@@ -1430,12 +1479,6 @@ config CC_OPTIMIZE_FOR_PERFORMANCE
 	  This is the default optimization level for the kernel, building
 	  with the "-O2" compiler flag for best performance and most
 	  helpful compile-time warnings.
-
-config CC_OPTIMIZE_FOR_PERFORMANCE_O3
-	bool "Optimize more for performance (-O3)"
-	help
-	  Choosing this option will pass "-O3" to your compiler to optimize
-	  the kernel yet more for performance.
 
 config CC_OPTIMIZE_FOR_SIZE
 	bool "Optimize for size"
@@ -1447,11 +1490,9 @@ config CC_OPTIMIZE_FOR_SIZE
 
 endchoice
 
-config LTO_GCC
-	bool "Enable Link Time Optimization for GCC"
-
 config HAVE_LD_DEAD_CODE_DATA_ELIMINATION
 	bool
+	default y
 	help
 	  This requires that the arch annotates or otherwise protects
 	  its external entry points from being discarded. Linker scripts
@@ -1463,10 +1504,11 @@ config HAVE_LD_DEAD_CODE_DATA_ELIMINATION
 config LD_DEAD_CODE_DATA_ELIMINATION
 	bool "Dead code and data elimination (EXPERIMENTAL)"
 	depends on HAVE_LD_DEAD_CODE_DATA_ELIMINATION
-	depends on EXPERT
-	depends on !(FUNCTION_TRACER && CC_IS_GCC && GCC_VERSION < 40800)
-	depends on $(cc-option,-ffunction-sections -fdata-sections)
-	depends on $(ld-option,--gc-sections)
+	default y
+#	depends on EXPERT
+#	depends on !(FUNCTION_TRACER && CC_IS_GCC && GCC_VERSION < 40800)
+#	depends on $(cc-option,-ffunction-sections -fdata-sections)
+#	depends on $(ld-option,--gc-sections)
 	help
 	  Enable this if you want to do dead code and data elimination with
 	  the linker by compiling with -ffunction-sections -fdata-sections,
@@ -1553,7 +1595,7 @@ config SGETMASK_SYSCALL
 
 config SYSFS_SYSCALL
 	bool "Sysfs syscall support" if EXPERT
-	default y
+	default n
 	---help---
 	  sys_sysfs is an obsolete system call no longer supported in libc.
 	  Note that disabling this option is more secure but might break
@@ -1626,6 +1668,7 @@ config PRINTK_NMI
 
 config BUG
 	bool "BUG() support" if EXPERT
+	default y
 	help
           Disabling this option eliminates support for BUG and WARN, reducing
           the size of your kernel image and potentially quietly ignoring
@@ -1960,6 +2003,7 @@ config VM_EVENT_COUNTERS
 	  if VM event counters are disabled.
 
 config SLUB_DEBUG
+	default y
 	bool "Enable SLUB debugging support" if EXPERT
 	depends on SLUB && SYSFS
 	help
@@ -2355,13 +2399,6 @@ config UNUSED_KSYMS_WHITELIST
 	  set here is the path to a text file containing the list of symbols,
 	  one per line. The path can be absolute, or relative to the kernel
 	  source tree.
-
-config MODULE_STRIPPED
-	bool "Reduce module size"
-	depends on MODULES
-	help
-	  Remove module parameter descriptions, author info, version, aliases,
-	  device tables, etc.
 
 endif # MODULES
 
