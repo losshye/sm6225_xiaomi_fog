@@ -40,9 +40,10 @@
 #include <linux/init_task.h>
 #include <linux/uaccess.h>
 #include <linux/build_bug.h>
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+#if defined(CONFIG_KSU_SUSFS_SUS_PATH) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 #include <linux/susfs_def.h>
 #endif
+
 #include "internal.h"
 #include "mount.h"
 
@@ -1668,13 +1669,6 @@ static struct dentry *__lookup_hash(const struct qstr *name,
 	}
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 	if (!IS_ERR(dentry) && dentry->d_inode && unlikely(dentry->d_inode->i_state & INODE_STATE_SUS_PATH) && likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC)) {
-		if ((flags & (LOOKUP_CREATE | LOOKUP_EXCL))) {
-			error = inode_permission(dir, MAY_WRITE | MAY_EXEC);
-			if (error) {
-				dput(dentry);
-				return ERR_PTR(error);
-			}
-		}
 		dput(dentry);
 		return ERR_PTR(-ENOENT);
 	}

@@ -135,7 +135,6 @@ static int susfs_mnt_alloc_id(struct mount *mnt)
 	return 0;
 }
 #endif
-
 static int mnt_alloc_id(struct mount *mnt)
 {
 	int res = ida_alloc(&mnt_id_ida, GFP_KERNEL);
@@ -178,6 +177,7 @@ static int mnt_alloc_group_id(struct mount *mnt)
 {
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 	int res;
+
 	// Check if mnt has sus mnt_id
 	if (mnt->mnt_id >= DEFAULT_SUS_MNT_ID) {
 		// If so, assign a sus mnt_group id DEFAULT_SUS_MNT_GROUP_ID from susfs_mnt_group_ida
@@ -3161,6 +3161,7 @@ struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
 		copy_flags |= CL_ZYGOTE_COPY_MNT_NS;
 	}
 #endif
+
 	new = copy_tree(old, old->mnt.mnt_root, copy_flags);
 	if (IS_ERR(new)) {
 		namespace_unlock();
@@ -3207,7 +3208,7 @@ struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
 	if (is_zygote_pid) {
 		last_entry_mnt_id = list_first_entry(&new_ns->list, struct mount, mnt_list)->mnt_id;
 		list_for_each_entry(q, &new_ns->list, mnt_list) {
-			if (unlikely(q->mnt.mnt_root->d_inode->i_state & INODE_STATE_SUS_MOUNT)) {
+			if (unlikely(q->mnt_id >= DEFAULT_SUS_MNT_ID)) {
 				continue;
 			}
 			q->mnt.susfs_mnt_id_backup = q->mnt_id;
@@ -3778,7 +3779,7 @@ void susfs_run_try_umount_for_current_mnt_ns(void) {
 	namespace_lock();
 	list_for_each_entry(mnt, &mnt_ns->list, mnt_list) {
 		// Change the sus mount to be private
-		if (mnt->mnt.mnt_root->d_inode->i_state & INODE_STATE_SUS_MOUNT) {
+		if (mnt->mnt_id >= DEFAULT_SUS_MNT_ID) {
 			change_mnt_propagation(mnt, MS_PRIVATE);
 		}
 	}
