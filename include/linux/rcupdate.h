@@ -94,12 +94,6 @@ static inline int rcu_preempt_depth(void)
 
 #endif /* #else #ifdef CONFIG_PREEMPT_RCU */
 
-#ifdef CONFIG_RCU_LAZY
-void call_rcu_flush(struct rcu_head *head, rcu_callback_t func);
-#else
-static inline void call_rcu_flush(struct rcu_head *head, rcu_callback_t func) {  call_rcu(head, func); }
-#endif
-
 /* Internal to kernel */
 void rcu_init(void);
 extern int rcu_scheduler_active __read_mostly;
@@ -460,24 +454,6 @@ static inline void rcu_preempt_sleep_check(void) { }
 	else								      \
 		smp_store_release(&p, RCU_INITIALIZER((typeof(p))_r_a_p__v)); \
 	_r_a_p__v;							      \
-})
-
-/**
- * rcu_replace_pointer() - replace an RCU pointer, returning its old value
- * @rcu_ptr: RCU pointer, whose old value is returned
- * @ptr: regular pointer
- * @c: the lockdep conditions under which the dereference will take place
- *
- * Perform a replacement, where @rcu_ptr is an RCU-annotated
- * pointer and @c is the lockdep argument that is passed to the
- * rcu_dereference_protected() call used to read that pointer.  The old
- * value of @rcu_ptr is returned, and @rcu_ptr is set to @ptr.
- */
-#define rcu_replace_pointer(rcu_ptr, ptr, c)				\
-({									\
-	typeof(ptr) __tmp = rcu_dereference_protected((rcu_ptr), (c));	\
-	rcu_assign_pointer((rcu_ptr), (ptr));				\
-	__tmp;								\
 })
 
 /**
