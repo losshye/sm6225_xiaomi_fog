@@ -177,7 +177,8 @@ static ssize_t double_tap_store(struct kobject *kobj,
     rc = kstrtoint(buf, 10, &val);
     if (rc)
     return -EINVAL;
-    lct_nvt_tp_gesture_callback(!!val);
+
+    ts->is_gesture_mode = !!val;
     return count;
 }
 static struct tp_common_ops double_tap_ops = {
