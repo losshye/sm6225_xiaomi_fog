@@ -106,17 +106,21 @@ static struct fts_gesture_st fts_gesture_data;
 static ssize_t double_tap_show(struct kobject *kobj,
                                struct kobj_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%d\n", fts_data->gesture_mode);
+	struct fts_ts_data *ts_data = fts_data;
+    return sprintf(buf, "%d\n", ts_data->gesture_mode);
 }
 static ssize_t double_tap_store(struct kobject *kobj,
                                 struct kobj_attribute *attr, const char *buf,
                                 size_t count)
 {
 	int rc, val;
+    struct fts_ts_data *ts_data = fts_data;
+
 	rc = kstrtoint(buf, 10, &val);
 	if (rc)
 	return -EINVAL;
-	lct_fts_tp_gesture_callback(!!val);
+
+	ts_data->gesture_mode = !!val;
 	return count;
 }
 static struct tp_common_ops double_tap_ops = {
