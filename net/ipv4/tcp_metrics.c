@@ -339,11 +339,14 @@ static struct tcp_metrics_block *tcp_get_metrics(struct sock *sk,
  */
 void tcp_update_metrics(struct sock *sk)
 {
-	struct inet_connection_sock;
-	struct dst_entry;
-	struct tcp_sock;
-	struct net;
-	struct tcp_metrics_block;
+	const struct inet_connection_sock *icsk = inet_csk(sk);
+	struct dst_entry *dst = __sk_dst_get(sk);
+	struct tcp_sock *tp = tcp_sk(sk);
+	struct net *net = sock_net(sk);
+	struct tcp_metrics_block *tm;
+	unsigned long rtt;
+	u32 val;
+	int m;
 
 	sk_dst_confirm(sk);
 	if (READ_ONCE(net->ipv4.sysctl_tcp_nometrics_save) || !dst)
