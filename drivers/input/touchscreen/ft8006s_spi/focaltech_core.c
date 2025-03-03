@@ -1433,6 +1433,17 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
         goto err_irq_req;
     }
 
+    ret = fts_create_apk_debug_channel(ts_data);
+    if (ret) {
+        FTS_ERROR("create apk debug node fail");
+    }
+
+	//longcheer touch procfs
+	ret = lct_create_procfs(ts_data);
+	if (ret < 0) {
+		FTS_ERROR("create procfs node fail");
+	}
+
     ret = fts_create_sysfs(ts_data);
     if (ret) {
         FTS_ERROR("create sysfs node fail");
@@ -1454,6 +1465,13 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     if (ret) {
         FTS_ERROR("init gesture fail");
     }
+
+#if FTS_TEST_EN
+    ret = fts_test_init(ts_data);
+    if (ret) {
+        FTS_ERROR("init production test fail");
+    }
+#endif
 
 #if FTS_ESDCHECK_EN
     ret = fts_esdcheck_init(ts_data);
@@ -1544,10 +1562,19 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
     fts_point_report_check_exit(ts_data);
 #endif
 
+    fts_release_apk_debug_channel(ts_data);
+
+	//remove longcheer procfs
+	lct_remove_procfs(ts_data);
+
     fts_remove_sysfs(ts_data);
     fts_ex_mode_exit(ts_data);
 
     fts_fwupg_exit(ts_data);
+
+#if FTS_TEST_EN
+    fts_test_exit(ts_data);
+#endif
 
 #if FTS_ESDCHECK_EN
     fts_esdcheck_exit(ts_data);
@@ -1675,7 +1702,14 @@ static int fts_ts_resume(struct device *dev)
         delay_gesture = false;
     }
 
-	fts_irq_enable();
+#if LCT_TP_WORK_EN
+	if (get_lct_tp_work_status())
+		fts_irq_enable();
+	else
+		FTS_ERROR("Touchscreen Disabled, Can't enable irq.");
+#else
+		fts_irq_enable();
+#endif
 
 #if LCT_TP_USB_PLUGIN
 	if (g_touchscreen_usb_pulgin.valid)
