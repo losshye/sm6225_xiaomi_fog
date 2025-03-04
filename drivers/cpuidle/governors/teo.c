@@ -390,9 +390,7 @@ static int teo_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	int i;
 
 	if (dev->last_state_idx >= 0) {
-	if (dev->last_state_idx >= 0) {
 		teo_update(drv, dev);
-		dev->last_state_idx = -1;
 		dev->last_state_idx = -1;
 	}
 
