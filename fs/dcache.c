@@ -2226,10 +2226,6 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
 			if (dentry->d_inode && unlikely(dentry->d_inode->i_state & 16777216) && likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC)) {
 				continue;
 		}
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-		if (dentry->d_inode && unlikely(dentry->d_inode->i_state & 16777216) && likely(current_cred()->user->android_kabi_reserved2 & 16777216)) {
-			continue;
-		}
 #endif
 		*seqp = seq;
 		return dentry;
