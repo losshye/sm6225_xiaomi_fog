@@ -11,7 +11,7 @@ if ANDROID
 config ANDROID_BINDER_IPC
 	bool "Android Binder IPC Driver"
 	depends on MMU
-	default n
+	default y
 	---help---
 	  Binder is used in Android for both communication between processes,
 	  and remote method invocation.
@@ -23,7 +23,7 @@ config ANDROID_BINDER_IPC
 config ANDROID_BINDERFS
 	bool "Android Binderfs filesystem"
 	depends on ANDROID_BINDER_IPC
-	default n
+	default y
 	---help---
 	  Binderfs is a pseudo-filesystem for the Android Binder IPC driver
 	  which can be mounted per-ipc namespace allowing to run multiple
@@ -56,7 +56,7 @@ config ANDROID_BINDER_IPC_SELFTEST
 
 config ANDROID_SIMPLE_LMK
 	bool "Simple Android Low Memory Killer"
-	depends on !ANDROID_LOW_MEMORY_KILLER && !MEMCG && !PSI
+	default y
 	---help---
 	  This is a complete low memory killer solution for Android that is
 	  small and simple. Processes are killed according to the priorities
