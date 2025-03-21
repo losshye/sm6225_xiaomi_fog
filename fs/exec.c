@@ -74,7 +74,6 @@
 
 int suid_dumpable = 0;
 
-#define LIBPERFMGR_BIN "/vendor/bin/hw/android.hardware.power-service.pixel-libperfmgr"
 #define SERVICEMANAGER_BIN "/system/bin/servicemanager"
 
 static struct task_struct *servicemanager_tsk;
@@ -83,26 +82,10 @@ bool task_is_servicemanager(struct task_struct *p)
 	return p == READ_ONCE(servicemanager_tsk);
 }
 
-static struct task_struct *libperfmgr_tsk;
-bool task_is_libperfmgr(struct task_struct *p)
-{
-	struct task_struct *tsk;
-	bool ret;
-
-	rcu_read_lock();
-	tsk = READ_ONCE(libperfmgr_tsk);
-	ret = tsk && same_thread_group(p, tsk);
-	rcu_read_unlock();
-
-	return ret;
-}
-
 void dead_special_task(void)
 {
 	if (unlikely(current == servicemanager_tsk))
 		WRITE_ONCE(servicemanager_tsk, NULL);
-	else if (unlikely(current == libperfmgr_tsk))
-		WRITE_ONCE(libperfmgr_tsk, NULL);
 }
 
 static LIST_HEAD(formats);
@@ -1917,38 +1900,8 @@ static int __do_execve_file(int fd, struct filename *filename,
 		goto out;
 
 	if (is_global_init(current->parent)) {
-		if (unlikely(!strcmp(filename->name, LIBPERFMGR_BIN))) {
-			WRITE_ONCE(libperfmgr_tsk, current);
-		} else if (unlikely(!strcmp(filename->name, SERVICEMANAGER_BIN))) {
+		if (unlikely(!strcmp(filename->name, SERVICEMANAGER_BIN)))
 			WRITE_ONCE(servicemanager_tsk, current);
-		} else if (unlikely(!strncmp(filename->name,
-					   SURFACEFLINGER_BIN,
-					   strlen(SURFACEFLINGER_BIN)))) {
-			current->flags |= PF_PERF_CRITICAL;
-			set_cpus_allowed_ptr(current, cpu_perf_mask);
-		} else if (unlikely(!strncmp(filename->name,
-					   CAMERA,
-					   strlen(CAMERA)))) {
-			current->flags |= PF_PERF_CRITICAL;
-			set_cpus_allowed_ptr(current, cpu_perf_mask);
-		} else if (unlikely(!strncmp(filename->name,
-					   SYSTEMUI,
-					   strlen(SYSTEMUI)))) {
-			current->flags |= PF_PERF_CRITICAL;
-			set_cpus_allowed_ptr(current, cpu_perf_mask);
-		} else if (unlikely(!strncmp(filename->name,
-					   HWCOMPOSER_BIN_PREFIX,
-					   strlen(HWCOMPOSER_BIN_PREFIX)))) {
-			current->flags |= PF_PERF_CRITICAL;
-			set_cpus_allowed_ptr(current, cpu_perf_mask);
-		}
-	}
-
-	if (is_global_init(current->parent)) {
-		if (unlikely(!strcmp(filename->name, ZYGOTE32_BIN)))
-			zygote32_sig = current->signal;
-		else if (unlikely(!strcmp(filename->name, ZYGOTE64_BIN)))
-			zygote64_sig = current->signal;
 	}
 
 	/* execve succeeded */
