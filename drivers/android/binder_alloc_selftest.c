@@ -106,10 +106,10 @@ static bool check_buffer_pages_allocated(struct binder_alloc *alloc,
 	unsigned long end;
 	int page_index;
 
-	end = PAGE_ALIGN(buffer->user_data + size);
-	page_addr = buffer->user_data;
+	end = PAGE_ALIGN((uintptr_t)buffer->user_data + size);
+	page_addr = (uintptr_t)buffer->user_data;
 	for (; page_addr < end; page_addr += PAGE_SIZE) {
-		page_index = (page_addr - alloc->buffer) / PAGE_SIZE;
+		page_index = (page_addr - (uintptr_t)alloc->buffer) / PAGE_SIZE;
 		if (!alloc->pages[page_index].page_ptr ||
 		    !list_empty(&alloc->pages[page_index].lru)) {
 			pr_err("expect alloc but is %s at page index %d\n",
@@ -167,8 +167,8 @@ static void binder_selftest_free_page(struct binder_alloc *alloc)
 	int i;
 	unsigned long count;
 
-	while ((count = list_lru_count(&binder_alloc_lru))) {
-		list_lru_walk(&binder_alloc_lru, binder_alloc_free_page,
+	while ((count = list_lru_count(&binder_freelist))) {
+		list_lru_walk(&binder_freelist, binder_alloc_free_page,
 			      NULL, count);
 	}
 
@@ -192,7 +192,7 @@ static void binder_selftest_alloc_free(struct binder_alloc *alloc,
 
 	/* Allocate from lru. */
 	binder_selftest_alloc_buf(alloc, buffers, sizes, seq);
-	if (list_lru_count(&binder_alloc_lru))
+	if (list_lru_count(&binder_freelist))
 		pr_err("lru list should be empty but is not\n");
 
 	binder_selftest_free_buf(alloc, buffers, sizes, seq, end);

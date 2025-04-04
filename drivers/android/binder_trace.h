@@ -247,9 +247,9 @@ TRACE_EVENT(binder_transaction_ref_to_ref,
 		  __entry->dest_ref_debug_id, __entry->dest_ref_desc)
 );
 
-TRACE_EVENT(binder_transaction_fd,
-	TP_PROTO(struct binder_transaction *t, int src_fd, int dest_fd),
-	TP_ARGS(t, src_fd, dest_fd),
+TRACE_EVENT(binder_transaction_fd_send,
+	TP_PROTO(struct binder_transaction *t, int fd, size_t offset),
+	TP_ARGS(t, fd, offset),
 
 	TP_STRUCT__entry(
 		__field(int, debug_id)
@@ -258,8 +258,26 @@ TRACE_EVENT(binder_transaction_fd,
 	),
 	TP_fast_assign(
 		__entry->debug_id = t->debug_id;
-		__entry->src_fd = src_fd;
-		__entry->dest_fd = dest_fd;
+		__entry->fd = fd;
+		__entry->offset = offset;
+	),
+	TP_printk("transaction=%d src_fd=%d offset=%zu",
+		  __entry->debug_id, __entry->fd, __entry->offset)
+);
+
+TRACE_EVENT(binder_transaction_fd_recv,
+	TP_PROTO(struct binder_transaction *t, int fd, size_t offset),
+	TP_ARGS(t, fd, offset),
+
+	TP_STRUCT__entry(
+		__field(int, debug_id)
+		__field(int, fd)
+		__field(size_t, offset)
+	),
+	TP_fast_assign(
+		__entry->debug_id = t->debug_id;
+		__entry->fd = fd;
+		__entry->offset = offset;
 	),
 	TP_printk("transaction=%d src_fd=%d ==> dest_fd=%d",
 		  __entry->debug_id, __entry->src_fd, __entry->dest_fd)
@@ -314,7 +332,7 @@ TRACE_EVENT(binder_update_page_range,
 	TP_fast_assign(
 		__entry->proc = alloc->pid;
 		__entry->allocate = allocate;
-		__entry->offset = start - alloc->buffer;
+		__entry->offset = start - (uintptr_t)alloc->buffer;
 		__entry->size = end - start;
 	),
 	TP_printk("proc=%d allocate=%d offset=%zu size=%zu",
@@ -377,6 +395,7 @@ DEFINE_EVENT(binder_lru_page_class, binder_unmap_kernel_end,
 	TP_PROTO(const struct binder_alloc *alloc, size_t page_index),
 	TP_ARGS(alloc, page_index));
 
+#ifdef CONFIG_ANDROID_BINDER_LOGS
 TRACE_EVENT(binder_command,
 	TP_PROTO(uint32_t cmd),
 	TP_ARGS(cmd),
