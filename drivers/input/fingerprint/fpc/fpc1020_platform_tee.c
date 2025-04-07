@@ -53,9 +53,6 @@
 #define RELEASE_WAKELOCK_W_V "release_wakelock_with_verification"
 #define RELEASE_WAKELOCK "release_wakelock"
 #define START_IRQS_RECEIVED_CNT "start_irqs_received_counter"
-#define PROC_NAME "hwinfo"
-static struct proc_dir_entry *proc_entry;
-extern int fpsensor;
 
 static const char * const pctl_names[] = {
 	"fpc1020_reset_reset",
@@ -591,12 +588,10 @@ static irqreturn_t fpc1020_irq_handler(int irq, void *handle)
 
 	dev_dbg(fpc1020->dev, "%s\n", __func__);
 
-	mutex_lock(&fpc1020->lock);
 	if (atomic_read(&fpc1020->wakeup_enabled)) {
 		fpc1020->nbr_irqs_received++;
 		__pm_wakeup_event(fpc1020->ttw_ws, FPC_TTW_HOLD_TIME);
 	}
-	mutex_unlock(&fpc1020->lock);
 
 	sysfs_notify(&fpc1020->dev->kobj, NULL, dev_attr_irq.attr.name);
 
@@ -623,34 +618,14 @@ static int fpc1020_request_named_gpio(struct fpc1020_data *fpc1020,
 	}
 	dev_dbg(dev, "%s %d\n", label, *gpio);
 
-static int proc_show_ver(struct seq_file *file, void *v)
-{
-	seq_printf(file, "Fingerprint: FPC\n");
 	return 0;
 }
-
-static int proc_open(struct inode *inode, struct file *file)
-{
-	pr_info("fpc proc_open\n");
-	single_open(file, proc_show_ver, NULL);
-	return 0;
-}
-
-static const struct file_operations proc_file_fpc_ops = {
-	.owner = THIS_MODULE,
-	.open = proc_open,
-	.read = seq_read,
-	.release = single_release,
-};
 
 static int fpc1020_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	int rc = 0;
-#ifndef CONFIG_FPC_COMPAT
 	size_t i;
-	int irqf;
-#endif
 	struct device_node *np = dev->of_node;
 	struct fpc1020_data *fpc1020 = devm_kzalloc(dev, sizeof(*fpc1020),
 			GFP_KERNEL);
@@ -662,11 +637,6 @@ static int fpc1020_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
-	if (fpsensor != 1) {
-		pr_err("Macle fpc1020_probe failed as fpsensor=%d(1=fp)\n", fpsensor);
-		return -1;
-	}
-
 	fpc1020->dev = dev;
 	platform_set_drvdata(pdev, fpc1020);
 
@@ -675,15 +645,6 @@ static int fpc1020_probe(struct platform_device *pdev)
 		rc = -EINVAL;
 		goto exit;
 	}
-#ifndef CONFIG_FPC_COMPAT
-	rc = fpc1020_request_named_gpio(fpc1020, "fpc,gpio_irq",
-			&fpc1020->irq_gpio);
-	if (rc)
-		goto exit;
-	rc = fpc1020_request_named_gpio(fpc1020, "fpc,gpio_rst",
-			&fpc1020->rst_gpio);
-	if (rc)
-		goto exit;
 
 	fpc1020->fingerprint_pinctrl = devm_pinctrl_get(dev);
 	if (IS_ERR(fpc1020->fingerprint_pinctrl)) {
@@ -729,24 +690,15 @@ static int fpc1020_probe(struct platform_device *pdev)
 	if (!fpc1020->ttw_ws)
 		return -ENOMEM;
 
-	if (of_property_read_bool(dev->of_node, "fpc,enable-on-boot")) {
-		dev_info(dev, "Enabling hardware\n");
-		(void)device_prepare(fpc1020, true);
-	}
-
-	rc = hw_reset(fpc1020);
+	rc = sysfs_create_group(&dev->kobj, &attribute_group);
 	if (rc) {
 		dev_err(dev, "could not create sysfs\n");
 		goto exit;
 	}
-#endif
 
-	proc_entry = proc_create(PROC_NAME, 0644, NULL, &proc_file_fpc_ops);
-	if (NULL == proc_entry) {
-		pr_err("fpc1020 Couldn't create proc entry!");
-		return -ENOMEM;
-	} else {
-		pr_err("fpc1020 Create proc entry success!");
+	if (of_property_read_bool(dev->of_node, "fpc,enable-on-boot")) {
+		dev_info(dev, "Enabling hardware\n");
+		(void)device_prepare(fpc1020, true);
 	}
 
 	rc = hw_reset(fpc1020);
@@ -793,7 +745,7 @@ static int __init fpc1020_init(void)
 	int rc = platform_driver_register(&fpc1020_driver);
 
 	if (!rc)
-		pr_info("%s - OK\n", __func__);
+		pr_info("%s OK\n", __func__);
 	else
 		pr_err("%s %d\n", __func__, rc);
 
