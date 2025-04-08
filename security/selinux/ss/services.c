@@ -737,7 +737,6 @@ static inline int security_validtrans_handle_fail(struct selinux_state *state,
 {
 #ifdef CONFIG_AUDIT
 	struct policydb *p = &state->ss->policydb;
-#ifdef CONFIG_AUDIT
 	char *o = NULL, *n = NULL, *t = NULL;
 	u32 olen, nlen, tlen;
 
@@ -974,10 +973,7 @@ void services_compute_xperms_decision(struct extended_perms_decision *xpermd,
 					xpermd->driver))
 			return;
 	} else {
-		pr_warn_once(
-			"SELinux: unknown extended permission (%u) will be ignored\n",
-			node->datum.u.xperms->specified);
-		return;
+		BUG();
 	}
 
 	if (node->key.specified == AVTAB_XPERMS_ALLOWED) {
@@ -1014,8 +1010,7 @@ void services_compute_xperms_decision(struct extended_perms_decision *xpermd,
 					node->datum.u.xperms->perms.p[i];
 		}
 	} else {
-		pr_warn_once("SELinux: unknown specified key (%u)\n",
-			     node->key.specified);
+		BUG();
 	}
 }
 
@@ -1975,7 +1970,6 @@ static inline int convert_context_handle_invalid_context(
 {
 #ifdef CONFIG_AUDIT
 	struct policydb *policydb = &state->ss->policydb;
-#ifdef CONFIG_AUDIT
 	char *s;
 	u32 len;
 #endif
@@ -2138,7 +2132,6 @@ bad:
 	context_destroy(newc);
 #endif
 	return 0;
-#endif
 }
 
 static void security_load_policycaps(struct selinux_state *state)
@@ -3605,7 +3598,6 @@ out:
 	return match;
 }
 
-#ifdef CONFIG_AUDIT
 static int (*aurule_callback)(void) = audit_update_lsm_rules;
 
 static int aurule_avc_callback(u32 event)
@@ -3628,7 +3620,6 @@ static int __init aurule_init(void)
 	return err;
 }
 __initcall(aurule_init);
-#endif
 
 #ifdef CONFIG_NETLABEL
 /**
