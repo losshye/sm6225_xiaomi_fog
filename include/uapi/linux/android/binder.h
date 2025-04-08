@@ -97,7 +97,6 @@ enum flat_binder_object_flags {
 	 * context
 	 */
 	FLAT_BINDER_FLAG_TXN_SECURITY_CTX = 0x1000,
-#endif /* __KERNEL__ */
 };
 
 #ifdef BINDER_IPC_32BIT
@@ -409,7 +408,6 @@ enum binder_driver_return_protocol {
 	/*
 	 * binder_transaction_data_secctx: the received command.
 	 */
-#endif /* __KERNEL__ */
 	BR_TRANSACTION = _IOR('r', 2, struct binder_transaction_data),
 	BR_REPLY = _IOR('r', 3, struct binder_transaction_data),
 	/*
@@ -484,7 +482,7 @@ enum binder_driver_return_protocol {
 
 	BR_FAILED_REPLY = _IO('r', 17),
 	/*
-	 * The the last transaction (either a bcTRANSACTION or
+	 * The last transaction (either a bcTRANSACTION or
 	 * a bcATTEMPT_ACQUIRE) failed (e.g. out of memory).  No parameters.
 	 */
 

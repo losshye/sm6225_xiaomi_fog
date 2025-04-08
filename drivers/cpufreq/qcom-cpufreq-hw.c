@@ -64,7 +64,7 @@ struct skipped_freq {
 	u32 high_temp_index;
 	u32 low_temp_index;
 	u32 final_index;
-	raw_spinlock_t lock;
+	spinlock_t lock;
 };
 
 struct cpufreq_qcom {
@@ -84,13 +84,12 @@ struct cpufreq_qcom {
 	char dcvsh_irq_name[MAX_FN_SIZE];
 	bool is_irq_enabled;
 	bool is_irq_requested;
-	bool exited;
 };
 
 struct cpufreq_counter {
 	u64 total_cycle_counter;
 	u32 prev_cycle_counter;
-	raw_spinlock_t lock;
+	spinlock_t lock;
 };
 
 struct cpufreq_cooling_cdev {
@@ -184,16 +183,13 @@ static void limits_dcvsh_poll(struct work_struct *work)
 
 	mutex_lock(&c->dcvsh_lock);
 
-	if (c->exited)
-		goto out;
-
 	cpu = cpumask_first(&c->related_cpus);
 
 	freq_limit = limits_mitigation_notify(c, true);
 
 	dcvsh_freq = qcom_cpufreq_hw_get(cpu);
 
-	if (freq_limit < dcvsh_freq) {
+	if (freq_limit != dcvsh_freq) {
 		mod_delayed_work(system_highpri_wq, &c->freq_poll_work,
 				msecs_to_jiffies(LIMITS_POLLING_DELAY_MS));
 	} else {
@@ -208,7 +204,6 @@ static void limits_dcvsh_poll(struct work_struct *work)
 		enable_irq(c->dcvsh_irq);
 	}
 
-out:
 	mutex_unlock(&c->dcvsh_lock);
 }
 
@@ -218,7 +213,7 @@ static bool dcvsh_core_count_change(struct cpufreq_qcom *c)
 	unsigned long freq, flags;
 	u32 index, regval;
 
-	raw_spin_lock_irqsave(&c->skip_data.lock, flags);
+	spin_lock_irqsave(&c->skip_data.lock, flags);
 	index = readl_relaxed(c->reg_bases[REG_PERF_STATE]);
 
 	freq = readl_relaxed(c->reg_bases[REG_DOMAIN_STATE]) & GENMASK(7, 0);
@@ -233,7 +228,7 @@ static bool dcvsh_core_count_change(struct cpufreq_qcom *c)
 		ret = true;
 	}
 
-	raw_spin_unlock_irqrestore(&c->skip_data.lock, flags);
+	spin_unlock_irqrestore(&c->skip_data.lock, flags);
 
 	return ret;
 }
@@ -277,7 +272,7 @@ u64 qcom_cpufreq_get_cpu_cycle_counter(int cpu)
 
 	cpu_domain = qcom_freq_domain_map[cpu];
 	cpu_counter = &qcom_cpufreq_counter[cpu];
-	raw_spin_lock_irqsave(&cpu_counter->lock, flags);
+	spin_lock_irqsave(&cpu_counter->lock, flags);
 
 	offset = CYCLE_CNTR_OFFSET(cpu, &cpu_domain->related_cpus,
 					accumulative_counter);
@@ -295,7 +290,7 @@ u64 qcom_cpufreq_get_cpu_cycle_counter(int cpu)
 		cpu_counter->prev_cycle_counter = val;
 	}
 	cycle_counter_ret = cpu_counter->total_cycle_counter;
-	raw_spin_unlock_irqrestore(&cpu_counter->lock, flags);
+	spin_unlock_irqrestore(&cpu_counter->lock, flags);
 
 	return cycle_counter_ret;
 }
@@ -309,10 +304,10 @@ qcom_cpufreq_hw_target_index(struct cpufreq_policy *policy,
 	unsigned long flags;
 
 	if (c->skip_data.skip && index == c->skip_data.high_temp_index) {
-		raw_spin_lock_irqsave(&c->skip_data.lock, flags);
+		spin_lock_irqsave(&c->skip_data.lock, flags);
 		writel_relaxed(c->skip_data.final_index,
 				c->reg_bases[REG_PERF_STATE]);
-		raw_spin_unlock_irqrestore(&c->skip_data.lock, flags);
+		spin_unlock_irqrestore(&c->skip_data.lock, flags);
 	} else {
 		writel_relaxed(index, c->reg_bases[REG_PERF_STATE]);
 	}
@@ -404,6 +399,8 @@ static int qcom_cpufreq_hw_cpu_init(struct cpufreq_policy *policy)
 
 		c->is_irq_requested = true;
 		c->is_irq_enabled = true;
+
+		sysfs_attr_init(&c->freq_limit_attr.attr);
 		c->freq_limit_attr.attr.name = "dcvsh_freq_limit";
 		c->freq_limit_attr.show = dcvsh_freq_limit_show;
 		c->freq_limit_attr.attr.mode = 0444;
@@ -425,12 +422,6 @@ static void qcom_cpufreq_ready(struct cpufreq_policy *policy)
 	static struct thermal_cooling_device *cdev[NR_CPUS];
 	struct device_node *np;
 	unsigned int cpu = policy->cpu;
-
-	struct cpufreq_qcom *c = qcom_freq_domain_map[cpu];
-
-	mutex_lock(&c->dcvsh_lock);
-	c->exited = true;
-	mutex_unlock(&c->dcvsh_lock);
 
 	if (cdev[cpu])
 		return;
@@ -495,11 +486,12 @@ static bool of_find_freq(u32 *of_table, int of_len, long frequency)
 }
 
 static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
-				    struct cpufreq_qcom *c)
+				    struct cpufreq_qcom *c,
+				    int domain_index)
 {
 	struct device *dev = &pdev->dev, *cpu_dev;
 	void __iomem *base_freq, *base_volt;
-	u32 data, src, lval, i, core_count, prev_cc, prev_freq = 0, cur_freq, volt;
+	u32 data, src, lval, i, core_count, prev_cc, prev_freq, cur_freq, volt;
 	u32 vc;
 	unsigned long cpu;
 	int ret, of_len, max_index;
@@ -512,7 +504,25 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 	if (!c->table)
 		return -ENOMEM;
 
-	raw_spin_lock_init(&c->skip_data.lock);
+	snprintf(tbl_name, sizeof(tbl_name), "qcom,cpufreq-table-%d",
+		 domain_index);
+	if (of_find_property(dev->of_node, tbl_name, &of_len) && of_len > 0) {
+		of_len /= sizeof(*of_table);
+
+		of_table = devm_kcalloc(dev, of_len, sizeof(*of_table),
+					GFP_KERNEL);
+		if (!of_table) {
+			ret = -ENOMEM;
+			goto err_cpufreq_table;
+		}
+
+		ret = of_property_read_u32_array(dev->of_node, tbl_name,
+						 of_table, of_len);
+		if (ret)
+			goto err_of_table;
+	}
+
+	spin_lock_init(&c->skip_data.lock);
 	base_freq = c->reg_bases[REG_FREQ_LUT_TABLE];
 	base_volt = c->reg_bases[REG_VOLT_LUT_TABLE];
 
@@ -538,32 +548,37 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 		dev_dbg(dev, "index=%d freq=%d, core_count %d\n",
 			i, c->table[i].frequency, core_count);
 
-		if (core_count != c->max_cores) {
-			if (core_count == (c->max_cores - 1)) {
-				c->skip_data.skip = true;
-				c->skip_data.high_temp_index = i;
-				c->skip_data.freq = cur_freq;
-				c->skip_data.cc = core_count;
-				c->skip_data.final_index = i + 1;
-				c->skip_data.low_temp_index = i + 1;
-				c->skip_data.prev_freq =
-						c->table[i-1].frequency;
-				c->skip_data.prev_index = i - 1;
-				c->skip_data.prev_cc = prev_cc;
-			} else {
-				cur_freq = CPUFREQ_ENTRY_INVALID;
-				c->table[i].flags = CPUFREQ_BOOST_FREQ;
+		if (!of_find_freq(of_table, of_len, c->table[i].frequency)) {
+			c->table[i].frequency = CPUFREQ_ENTRY_INVALID;
+			cur_freq = CPUFREQ_ENTRY_INVALID;
+			invalidate_freq = true;
+		} else {
+			if (core_count != c->max_cores) {
+				if (core_count == (c->max_cores - 1)) {
+					c->skip_data.skip = true;
+					c->skip_data.high_temp_index = i;
+					c->skip_data.freq = cur_freq;
+					c->skip_data.cc = core_count;
+					c->skip_data.final_index = i + 1;
+					c->skip_data.low_temp_index = i + 1;
+					c->skip_data.prev_freq =
+							c->table[i-1].frequency;
+					c->skip_data.prev_index = i - 1;
+					c->skip_data.prev_cc = prev_cc;
+				} else {
+					cur_freq = CPUFREQ_ENTRY_INVALID;
+					c->table[i].flags = CPUFREQ_BOOST_FREQ;
+				}
 			}
-		}
 
-		/*
-		 * Two of the same frequencies with the same core counts means
-		 * end of table.
-		 */
-		if (i > 0 && c->table[i - 1].frequency ==
-				c->table[i].frequency) {
-			struct cpufreq_frequency_table *prev =
-						&c->table[i - 1];
+			/*
+			 * Two of the same frequencies with the same core counts means
+			 * end of table.
+			 */
+			if (i > 0 && c->table[i - 1].frequency ==
+					c->table[i].frequency) {
+					struct cpufreq_frequency_table *prev =
+								&c->table[i - 1];
 
 					if (prev_freq == CPUFREQ_ENTRY_INVALID)
 						prev->flags = CPUFREQ_BOOST_FREQ;
@@ -580,8 +595,9 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 			cpu_dev = get_cpu_device(cpu);
 			if (!cpu_dev)
 				continue;
-			dev_pm_opp_add(cpu_dev, c->table[i].frequency * 1000,
-							volt);
+			if (!invalidate_freq)
+				dev_pm_opp_add(cpu_dev, c->table[i].frequency * 1000,
+								volt);
 		}
 	}
 
@@ -607,6 +623,12 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 	}
 
 	return 0;
+
+err_of_table:
+	devm_kfree(dev, of_table);
+err_cpufreq_table:
+	devm_kfree(dev, c->table);
+	return ret;
 }
 
 static int qcom_get_related_cpus(int index, struct cpumask *m)
@@ -690,7 +712,7 @@ static int qcom_cpu_resources_init(struct platform_device *pdev,
 	c->xo_rate = xo_rate;
 	c->cpu_hw_rate = cpu_hw_rate;
 
-	ret = qcom_cpufreq_hw_read_lut(pdev, c);
+	ret = qcom_cpufreq_hw_read_lut(pdev, c, index);
 	if (ret) {
 		dev_err(dev, "Domain-%d failed to read LUT\n", index);
 		return ret;
@@ -791,13 +813,13 @@ static int cpufreq_hw_set_cur_state(struct thermal_cooling_device *cdev,
 	cpu_cdev->cpu_cooling_state = state;
 
 	if (state == CPUFREQ_HW_HIGH_TEMP_LEVEL) {
-		raw_spin_lock_irqsave(&c->skip_data.lock, flags);
+		spin_lock_irqsave(&c->skip_data.lock, flags);
 		c->skip_data.final_index = c->skip_data.high_temp_index;
-		raw_spin_unlock_irqrestore(&c->skip_data.lock, flags);
+		spin_unlock_irqrestore(&c->skip_data.lock, flags);
 	} else {
-		raw_spin_lock_irqsave(&c->skip_data.lock, flags);
+		spin_lock_irqsave(&c->skip_data.lock, flags);
 		c->skip_data.final_index = c->skip_data.low_temp_index;
-		raw_spin_unlock_irqrestore(&c->skip_data.lock, flags);
+		spin_unlock_irqrestore(&c->skip_data.lock, flags);
 	}
 
 	if (policy->cur != c->skip_data.freq)
@@ -870,7 +892,7 @@ static int cpufreq_hw_register_cooling_device(struct platform_device *pdev)
 						cpu_cdev,
 						&cpufreq_hw_cooling_ops);
 				if (IS_ERR(cpu_cdev->cdev)) {
-					pr_err("Cooling register failed for %s, ret: %ld\n",
+					pr_err("Cooling register failed for %s, ret: %d\n",
 						cdev_name,
 						PTR_ERR(cpu_cdev->cdev));
 					c->skip_data.final_index =
@@ -899,7 +921,7 @@ static int qcom_cpufreq_hw_driver_probe(struct platform_device *pdev)
 	}
 
 	for_each_possible_cpu(cpu)
-		raw_spin_lock_init(&qcom_cpufreq_counter[cpu].lock);
+		spin_lock_init(&qcom_cpufreq_counter[cpu].lock);
 
 	rc = cpufreq_register_driver(&cpufreq_qcom_hw_driver);
 	if (rc) {

@@ -33,7 +33,6 @@
 #include <linux/percpu-rwsem.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/cpuset.h>
-#include <linux/random.h>
 
 #include <trace/events/power.h>
 #define CREATE_TRACE_POINTS
@@ -330,16 +329,6 @@ void lockdep_assert_cpus_held(void)
 	percpu_rwsem_assert_held(&cpu_hotplug_lock);
 }
 
-static void lockdep_acquire_cpus_lock(void)
-{
-	rwsem_acquire(&cpu_hotplug_lock.rw_sem.dep_map, 0, 0, _THIS_IP_);
-}
-
-static void lockdep_release_cpus_lock(void)
-{
-	rwsem_release(&cpu_hotplug_lock.rw_sem.dep_map, 1, _THIS_IP_);
-}
-
 /*
  * Wait for currently running CPU hotplug operations to complete (if any) and
  * disable future CPU hotplug (from sysfs). The 'cpu_add_remove_lock' protects
@@ -369,17 +358,6 @@ void cpu_hotplug_enable(void)
 	cpu_maps_update_done();
 }
 EXPORT_SYMBOL_GPL(cpu_hotplug_enable);
-
-#else
-
-static void lockdep_acquire_cpus_lock(void)
-{
-}
-
-static void lockdep_release_cpus_lock(void)
-{
-}
-
 #endif	/* CONFIG_HOTPLUG_CPU */
 
 /*
@@ -664,12 +642,6 @@ static void cpuhp_thread_fun(unsigned int cpu)
 	 */
 	smp_mb();
 
-	/*
-	 * The BP holds the hotplug lock, but we're now running on the AP,
-	 * ensure that anybody asserting the lock is held, will actually find
-	 * it so.
-	 */
-	lockdep_acquire_cpus_lock();
 	cpuhp_lock_acquire(bringup);
 
 	if (st->single) {
@@ -715,7 +687,6 @@ static void cpuhp_thread_fun(unsigned int cpu)
 	}
 
 	cpuhp_lock_release(bringup);
-	lockdep_release_cpus_lock();
 
 	if (!st->should_run)
 		complete_ap_thread(st, bringup);
@@ -1044,9 +1015,6 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
 	if (!cpu_present(cpu))
 		return -EINVAL;
 
-	if (!tasks_frozen && !cpu_isolated(cpu) && num_online_uniso_cpus() == 1)
-		return -EBUSY;
-
 	cpus_write_lock();
 	if (trace_cpuhp_latency_enabled())
 		start_time = sched_clock();
@@ -1109,17 +1077,7 @@ static int cpu_down_maps_locked(unsigned int cpu, enum cpuhp_state target)
 
 static int do_cpu_down(unsigned int cpu, enum cpuhp_state target)
 {
-	struct cpumask newmask;
 	int err;
-
-	preempt_disable();
-	cpumask_andnot(&newmask, cpu_online_mask, cpumask_of(cpu));
-	preempt_enable();
-
-	/* One big and LITTLE CPU must remain online */
-	if (!cpumask_intersects(&newmask, cpu_lp_mask) ||
-	    !cpumask_intersects(&newmask, cpu_perf_mask))
-		return -EINVAL;
 
 	/*
 	 * When cpusets are enabled, the rebuilding of the scheduling
@@ -1352,7 +1310,6 @@ int freeze_secondary_cpus(int primary)
 	int cpu, error = 0;
 
 	cpu_maps_update_begin();
-	unaffine_perf_irqs();
 	if (!cpu_online(primary))
 		primary = cpumask_first(cpu_online_mask);
 	/*
@@ -1367,7 +1324,7 @@ int freeze_secondary_cpus(int primary)
 			continue;
 
 		if (pm_wakeup_pending()) {
-			pr_debug("Wakeup pending. Abort CPU freeze\n");
+			pr_info("Wakeup pending. Abort CPU freeze\n");
 			error = -EBUSY;
 			break;
 		}
@@ -1378,7 +1335,7 @@ int freeze_secondary_cpus(int primary)
 		if (!error)
 			cpumask_set_cpu(cpu, frozen_cpus);
 		else {
-			pr_debug("Error taking CPU%d down: %d\n", cpu, error);
+			pr_err("Error taking CPU%d down: %d\n", cpu, error);
 			break;
 		}
 	}
@@ -1386,7 +1343,7 @@ int freeze_secondary_cpus(int primary)
 	if (!error)
 		BUG_ON(num_online_cpus() > 1);
 	else
-		pr_debug("Non-boot CPUs are not disabled\n");
+		pr_err("Non-boot CPUs are not disabled\n");
 
 	/*
 	 * Make sure the CPUs won't be enabled by someone else. We need to do
@@ -1430,7 +1387,7 @@ void enable_nonboot_cpus(void)
 			pr_debug("CPU%d is up\n", cpu);
 			cpu_device = get_cpu_device(cpu);
 			if (!cpu_device)
-				pr_debug("%s: failed to get cpu%d device\n",
+				pr_err("%s: failed to get cpu%d device\n",
 				       __func__, cpu);
 			else
 				kobject_uevent(&cpu_device->kobj, KOBJ_ONLINE);
@@ -1442,7 +1399,6 @@ void enable_nonboot_cpus(void)
 	arch_enable_nonboot_cpus_end();
 
 	cpumask_clear(frozen_cpus);
-	reaffine_perf_irqs(false);
 out:
 	cpu_maps_update_done();
 }
@@ -1506,22 +1462,6 @@ core_initcall(cpu_hotplug_pm_sync_init);
 
 int __boot_cpu_id;
 
-/* Horrific hacks because we can't add more to cpuhp_hp_states. */
-static int random_and_perf_prepare_fusion(unsigned int cpu)
-{
-#ifdef CONFIG_PERF_EVENTS
-	perf_event_init_cpu(cpu);
-#endif
-	random_prepare_cpu(cpu);
-	return 0;
-}
-static int random_and_workqueue_online_fusion(unsigned int cpu)
-{
-	workqueue_online_cpu(cpu);
-	random_online_cpu(cpu);
-	return 0;
-}
-
 #endif /* CONFIG_SMP */
 
 /* Boot processor state steps */
@@ -1540,7 +1480,7 @@ static struct cpuhp_step cpuhp_hp_states[] = {
 	},
 	[CPUHP_PERF_PREPARE] = {
 		.name			= "perf:prepare",
-		.startup.single		= random_and_perf_prepare_fusion,
+		.startup.single		= perf_event_init_cpu,
 		.teardown.single	= perf_event_exit_cpu,
 	},
 	[CPUHP_WORKQUEUE_PREP] = {
@@ -1658,7 +1598,7 @@ static struct cpuhp_step cpuhp_hp_states[] = {
 	},
 	[CPUHP_AP_WORKQUEUE_ONLINE] = {
 		.name			= "workqueue:online",
-		.startup.single		= random_and_workqueue_online_fusion,
+		.startup.single		= workqueue_online_cpu,
 		.teardown.single	= workqueue_offline_cpu,
 	},
 	[CPUHP_AP_RCUTREE_ONLINE] = {
@@ -2451,9 +2391,6 @@ EXPORT_SYMBOL(__cpu_present_mask);
 struct cpumask __cpu_active_mask __read_mostly;
 EXPORT_SYMBOL(__cpu_active_mask);
 
-struct cpumask __cpu_isolated_mask __read_mostly;
-EXPORT_SYMBOL(__cpu_isolated_mask);
-
 #if CONFIG_LITTLE_CPU_MASK
 static const unsigned long lp_cpu_bits = CONFIG_LITTLE_CPU_MASK;
 const struct cpumask *const cpu_lp_mask = to_cpumask(&lp_cpu_bits);
@@ -2470,6 +2407,14 @@ const struct cpumask *const cpu_perf_mask = cpu_possible_mask;
 #endif
 EXPORT_SYMBOL(cpu_perf_mask);
 
+#if CONFIG_PRIME_CPU_MASK
+static const unsigned long prime_cpu_bits = CONFIG_PRIME_CPU_MASK;
+const struct cpumask *const cpu_prime_mask = to_cpumask(&prime_cpu_bits);
+#else
+const struct cpumask *const cpu_prime_mask = cpu_possible_mask;
+#endif
+EXPORT_SYMBOL(cpu_prime_mask);
+
 void init_cpu_present(const struct cpumask *src)
 {
 	cpumask_copy(&__cpu_present_mask, src);
@@ -2483,11 +2428,6 @@ void init_cpu_possible(const struct cpumask *src)
 void init_cpu_online(const struct cpumask *src)
 {
 	cpumask_copy(&__cpu_online_mask, src);
-}
-
-void init_cpu_isolated(const struct cpumask *src)
-{
-	cpumask_copy(&__cpu_isolated_mask, src);
 }
 
 /*

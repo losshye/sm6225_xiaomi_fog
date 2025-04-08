@@ -1,15 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (C) 2012 Google, Inc.
- *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
  */
 
 #undef TRACE_SYSTEM
@@ -253,8 +244,8 @@ TRACE_EVENT(binder_transaction_fd_send,
 
 	TP_STRUCT__entry(
 		__field(int, debug_id)
-		__field(int, src_fd)
-		__field(int, dest_fd)
+		__field(int, fd)
+		__field(size_t, offset)
 	),
 	TP_fast_assign(
 		__entry->debug_id = t->debug_id;
@@ -279,8 +270,8 @@ TRACE_EVENT(binder_transaction_fd_recv,
 		__entry->fd = fd;
 		__entry->offset = offset;
 	),
-	TP_printk("transaction=%d src_fd=%d ==> dest_fd=%d",
-		  __entry->debug_id, __entry->src_fd, __entry->dest_fd)
+	TP_printk("transaction=%d dest_fd=%d offset=%zu",
+		  __entry->debug_id, __entry->fd, __entry->offset)
 );
 
 DECLARE_EVENT_CLASS(binder_buffer_class,
@@ -427,7 +418,7 @@ TRACE_EVENT(binder_return,
 			  binder_return_strings[_IOC_NR(__entry->cmd)] :
 			  "unknown")
 );
-
+#endif
 #endif /* _BINDER_TRACE_H */
 
 #undef TRACE_INCLUDE_PATH
