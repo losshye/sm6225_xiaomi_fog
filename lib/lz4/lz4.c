@@ -3006,7 +3006,7 @@ LZ4_FORCE_INLINE int __LZ4_decompress_generic(
 	}
 }
 
-static LZ4_FORCE_INLINE int
+LZ4_FORCE_INLINE int
 LZ4_decompress_generic(const char *const src, char *const dst, int srcSize,
 		       /*
 		 * If endOnInput == endOnInputSize,
