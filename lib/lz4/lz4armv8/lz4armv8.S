@@ -249,7 +249,7 @@ ENTRY(_lz4_decompress_asm)
 	lz4_decompress_asm_generic
 ENDPROC(_lz4_decompress_asm)
 
-SYM_INNER_LABEL(Failed, SYM_L_LOCAL)
+Failed:
 	mov	tmp, #-1
 	b	Exit_here
 
