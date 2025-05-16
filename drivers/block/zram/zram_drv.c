@@ -24,7 +24,6 @@
 #include <linux/device.h>
 #include <linux/highmem.h>
 #include <linux/slab.h>
-#include <linux/swap.h>
 #include <linux/backing-dev.h>
 #include <linux/string.h>
 #include <linux/vmalloc.h>
@@ -52,6 +51,8 @@ static unsigned int num_devices = 1;
  * uncompressed in memory.
  */
 static size_t huge_class_size;
+
+static const struct block_device_operations zram_devops;
 
 static void zram_free_page(struct zram *zram, size_t index);
 static int zram_read_from_zspool(struct zram *zram, struct page *page,
@@ -119,15 +120,14 @@ static inline struct zram *dev_to_zram(struct device *dev)
 	return (struct zram *)dev_to_disk(dev)->private_data;
 }
 
-static struct zram_entry *zram_get_entry(struct zram *zram, u32 index)
+static unsigned long zram_get_handle(struct zram *zram, u32 index)
 {
-	return zram->table[index].entry;
+	return zram->table[index].handle;
 }
 
-static void zram_set_entry(struct zram *zram, u32 index,
-			struct zram_entry *entry)
+static void zram_set_handle(struct zram *zram, u32 index, unsigned long handle)
 {
-	zram->table[index].entry = entry;
+	zram->table[index].handle = handle;
 }
 
 static bool zram_test_flag(struct zram *zram, u32 index,
@@ -577,10 +577,8 @@ static void reset_bdev(struct zram *zram)
 	/* hope filp_close flush all of IO */
 	filp_close(zram->backing_dev, NULL);
 	zram->backing_dev = NULL;
-	zram->old_block_size = 0;
 	zram->bdev = NULL;
-	zram->disk->queue->backing_dev_info->capabilities |=
-				BDI_CAP_SYNCHRONOUS_IO;
+	zram->disk->fops = &zram_devops;
 	kvfree(zram->bitmap);
 	zram->bitmap = NULL;
 }
@@ -640,7 +638,7 @@ static ssize_t backing_dev_store(struct device *dev,
 		goto out;
 	}
 
-	strlcpy(file_name, buf, PATH_MAX);
+	strscpy(file_name, buf, PATH_MAX);
 	/* ignore trailing newline */
 	sz = strlen(file_name);
 	if (sz > 0 && file_name[sz - 1] == '\n')
@@ -686,23 +684,10 @@ static ssize_t backing_dev_store(struct device *dev,
 
 	reset_bdev(zram);
 
-	zram->old_block_size = old_block_size;
 	zram->bdev = bdev;
 	zram->backing_dev = backing_dev;
 	zram->bitmap = bitmap;
 	zram->nr_pages = nr_pages;
-	/*
-	 * With writeback feature, zram does asynchronous IO so it's no longer
-	 * synchronous device so let's remove synchronous io flag. Othewise,
-	 * upper layer(e.g., swap) could wait IO completion rather than
-	 * (submit and return), which will cause system sluggish.
-	 * Furthermore, when the IO function returns(e.g., swap_readpage),
-	 * upper layer expects IO was done so it could deallocate the page
-	 * freely but in fact, IO is going on so finally could cause
-	 * use-after-free when the IO is really done.
-	 */
-	zram->disk->queue->backing_dev_info->capabilities &=
-			~BDI_CAP_SYNCHRONOUS_IO;
 	up_write(&zram->init_lock);
 
 	pr_info("setup backing device %s\n", file_name);
@@ -710,8 +695,7 @@ static ssize_t backing_dev_store(struct device *dev,
 
 	return len;
 out:
-	if (bitmap)
-		kvfree(bitmap);
+	kvfree(bitmap);
 
 	if (bdev)
 		blkdev_put(bdev, zram);
@@ -1519,56 +1503,6 @@ static DEVICE_ATTR_RO(bd_stat);
 #endif
 static DEVICE_ATTR_RO(debug_stat);
 
-static unsigned long zram_entry_handle(struct zram *zram,
-		struct zram_entry *entry)
-{
-	if (zram_dedup_enabled(zram))
-		return entry->handle;
-	else
-		return (unsigned long)entry;
-}
-
-static struct zram_entry *zram_entry_alloc(struct zram *zram,
-					   unsigned int len, gfp_t flags)
-{
-	struct zram_entry *entry;
-	unsigned long handle;
-
-	handle = zs_malloc(zram->mem_pool, len, flags);
-	if (!handle)
-		return NULL;
-
-	if (!zram_dedup_enabled(zram))
-		return (struct zram_entry *)handle;
-
-	entry = kzalloc(sizeof(*entry),
-			flags & ~(__GFP_HIGHMEM|__GFP_MOVABLE|__GFP_CMA));
-	if (!entry) {
-		zs_free(zram->mem_pool, handle);
-		return NULL;
-	}
-
-	zram_dedup_init_entry(zram, entry, handle, len);
-	atomic64_add(sizeof(*entry), &zram->stats.meta_data_size);
-
-	return entry;
-}
-
-void zram_entry_free(struct zram *zram, struct zram_entry *entry)
-{
-	if (!zram_dedup_put_entry(zram, entry))
-		return;
-
-	zs_free(zram->mem_pool, zram_entry_handle(zram, entry));
-
-	if (!zram_dedup_enabled(zram))
-		return;
-
-	kfree(entry);
-
-	atomic64_sub(sizeof(*entry), &zram->stats.meta_data_size);
-}
-
 static void zram_meta_free(struct zram *zram, u64 disksize)
 {
 	size_t num_pages = disksize >> PAGE_SHIFT;
@@ -1582,7 +1516,6 @@ static void zram_meta_free(struct zram *zram, u64 disksize)
 		zram_free_page(zram, index);
 
 	zs_destroy_pool(zram->mem_pool);
-	zram_dedup_fini(zram);
 	vfree(zram->table);
 	zram->table = NULL;
 }
@@ -1614,8 +1547,9 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 
 static void zram_free_page(struct zram *zram, size_t index)
 {
-	struct zram_entry *entry;
+	unsigned long handle;
 
+#ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	zram->table[index].ac_time = 0;
 #endif
 
@@ -1645,17 +1579,17 @@ static void zram_free_page(struct zram *zram, size_t index)
 		goto out;
 	}
 
-	entry = zram_get_entry(zram, index);
-	if (!entry)
+	handle = zram_get_handle(zram, index);
+	if (!handle)
 		return;
 
-	zram_entry_free(zram, entry);
+	zs_free(zram->mem_pool, handle);
 
 	atomic64_sub(zram_get_obj_size(zram, index),
 		     &zram->stats.compr_data_size);
 out:
 	atomic64_dec(&zram->stats.pages_stored);
-	zram_set_entry(zram, index, NULL);
+	zram_set_handle(zram, index, 0);
 	zram_set_obj_size(zram, index, 0);
 }
 
@@ -2469,9 +2403,6 @@ static void zram_destroy_comps(struct zram *zram)
 
 static void zram_reset_device(struct zram *zram)
 {
-	struct zcomp *comp;
-	u64 disksize;
-
 	down_write(&zram->init_lock);
 
 	zram->limit_pages = 0;
@@ -2651,7 +2582,6 @@ static struct attribute *zram_disk_attrs[] = {
 	&dev_attr_writeback_limit.attr,
 	&dev_attr_writeback_limit_enable.attr,
 #endif
-	&dev_attr_use_dedup.attr,
 	&dev_attr_io_stat.attr,
 	&dev_attr_mm_stat.attr,
 #ifdef CONFIG_ZRAM_WRITEBACK
@@ -2666,14 +2596,7 @@ static struct attribute *zram_disk_attrs[] = {
 	NULL,
 };
 
-static const struct attribute_group zram_disk_attr_group = {
-	.attrs = zram_disk_attrs,
-};
-
-static const struct attribute_group *zram_disk_attr_groups[] = {
-	&zram_disk_attr_group,
-	NULL,
-};
+ATTRIBUTE_GROUPS(zram_disk);
 
 /*
  * Allocate and initialize new zram device. the function returns
@@ -2721,7 +2644,6 @@ static int zram_add(void)
 	zram->disk->first_minor = device_id;
 	zram->disk->fops = &zram_devops;
 	zram->disk->queue = queue;
-	zram->disk->queue->queuedata = zram;
 	zram->disk->private_data = zram;
 	snprintf(zram->disk->disk_name, 16, "zram%d", device_id);
 	atomic_set(&zram->pp_in_progress, 0);
@@ -2777,13 +2699,14 @@ out_free_dev:
 static int zram_remove(struct zram *zram)
 {
 	struct block_device *bdev;
+	bool claimed;
 
 	bdev = bdget_disk(zram->disk, 0);
 	if (!bdev)
 		return -ENOMEM;
 
 	mutex_lock(&bdev->bd_mutex);
-	if (bdev->bd_openers || zram->claim) {
+	if (bdev->bd_openers) {
 		mutex_unlock(&bdev->bd_mutex);
 		bdput(bdev);
 		return -EBUSY;
@@ -2899,7 +2822,7 @@ static struct class zram_control_class = {
 
 static int zram_remove_cb(int id, void *ptr, void *data)
 {
-	zram_remove(ptr);
+	WARN_ON_ONCE(zram_remove(ptr));
 	return 0;
 }
 
