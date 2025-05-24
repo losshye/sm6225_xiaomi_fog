@@ -1622,7 +1622,7 @@ static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 	 * ENQUEUE_DELAYED task before its ->sched_delayed gets cleared
 	 * in ->enqueue_task().
 	 */
-	uclamp_rq_inc(rq, p);
+	 uclamp_rq_inc(rq, p, flags);
 
 }
 
