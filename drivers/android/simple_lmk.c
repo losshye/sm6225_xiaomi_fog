@@ -263,7 +263,7 @@ static void scan_and_kill(void)
 		set_bit(MMF_OOM_VICTIM, &mm->flags);
 
 		/* Accelerate the victim's death by forcing the kill signal */
-		do_send_sig_info(SIGKILL, SEND_SIG_FORCED, vtsk, PIDTYPE_TGID);
+		do_send_sig_info(SIGKILL, SEND_SIG_PRIV, vtsk, PIDTYPE_TGID);
 
 		/*
 		 * Mark the thread group dead so that other kernel code knows,
@@ -426,6 +426,12 @@ static int simple_lmk_reaper_thread(void *data)
 	return 0;
 }
 
+void simple_lmk_trigger(void)
+{
+	if (!atomic_cmpxchg_acquire(&needs_reclaim, 0, 1))
+		wake_up(&oom_waitq);
+}
+
 void simple_lmk_mm_freed(struct mm_struct *mm)
 {
 	int i;
@@ -459,12 +465,9 @@ void simple_lmk_mm_freed(struct mm_struct *mm)
 static int simple_lmk_vmpressure_cb(struct notifier_block *nb,
 				    unsigned long pressure, void *data)
 {
-	if (pressure == 100) {
-		atomic_set(&needs_reclaim, 1);
-		smp_mb__after_atomic();
-		if (waitqueue_active(&oom_waitq))
-			wake_up(&oom_waitq);
-	}
+	if (pressure >= 90) 
+		simple_lmk_trigger();
+	
 
 	return NOTIFY_OK;
 }
