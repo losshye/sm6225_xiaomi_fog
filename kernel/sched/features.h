@@ -4,12 +4,11 @@
  * Using the avg_vruntime, do the right thing and preserve lag across
  * sleep+wake cycles. EEVDF placement strategy #1, #2 if disabled.
  */
-#define SCHED_FEAT_ENFORCE_ELIGIBILITY 0
 #define SCHED_FEAT_PLACE_LAG 0
 /*
  * Give new tasks half a slice to ease into the competition.
  */
-#define SCHED_FEAT_PLACE_DEADLINE_INITIAL 0
+#define SCHED_FEAT_PLACE_DEADLINE_INITIAL 1
 /*
  * Preserve relative virtual deadline on 'migration'.
  */
@@ -18,7 +17,7 @@
  * Inhibit (wakeup) preemption until the current task has either matched the
  * 0-lag point or until is has exhausted it's slice.
  */
-#define SCHED_FEAT_RUN_TO_PARITY 0
+#define SCHED_FEAT_RUN_TO_PARITY 1
 /*
  * Allow wakeup of tasks with a shorter slice to cancel RESPECT_SLICE for
  * current.
@@ -65,7 +64,6 @@
 #define SCHED_FEAT_WAKEUP_PREEMPTION 1
 
 #define SCHED_FEAT_HRTICK 0
-#define SCHED_FEAT_DOUBLE_TICK 0
 
 /*
  * Decrement CPU capacity based on time not spent running tasks
@@ -117,7 +115,6 @@
  * UtilEstimation. Use estimated CPU utilization.
  */
 #define SCHED_FEAT_UTIL_EST 1
-#define SCHED_FEAT_UTIL_EST_FASTUP 1
 
 /*
  * Fast pre-selection of CPU candidates for EAS.
@@ -137,21 +134,3 @@
  * Request max frequency from schedutil whenever a RT task is running.
  */
 #define SCHED_FEAT_SUGOV_RT_MAX_FREQ 0
-
-/*
- * Apply schedtune boost hold to tasks of all sched classes.
- * If enabled, schedtune will hold the boost applied to a CPU
- * for 50ms regardless of task activation - if the task is
- * still running 50ms later, the boost hold expires and schedtune
- * boost will expire immediately the task stops.
- * If disabled, this behaviour will only apply to tasks of the
- * RT class.
- */
-#define SCHED_FEAT_SCHEDTUNE_BOOST_HOLD_ALL 0
-
-/*
- * Inflate the effective utilization of SchedTune-boosted tasks, which
- * generally leads to usage of higher frequencies.
- * If disabled, boosts will only bias tasks to higher-capacity CPUs.
- */
-#define SCHED_FEAT_SCHEDTUNE_BOOST_UTIL 0
