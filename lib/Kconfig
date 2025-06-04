@@ -70,6 +70,8 @@ config INDIRECT_PIO
 
 	  When in doubt, say N.
 
+source "lib/crypto/Kconfig"
+
 config CRC_CCITT
 	tristate "CRC-CCITT functions"
 	help
@@ -642,3 +644,6 @@ config GENERIC_LIB_CMPDI2
 
 config GENERIC_LIB_UCMPDI2
 	bool
+
+config CRYPTO_LIB_SHA256
+	tristate
