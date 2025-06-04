@@ -70,8 +70,6 @@ config INDIRECT_PIO
 
 	  When in doubt, say N.
 
-source "lib/crypto/Kconfig"
-
 config CRC_CCITT
 	tristate "CRC-CCITT functions"
 	help
@@ -266,21 +264,19 @@ config LZ4_COMPRESS
 config LZ4HC_COMPRESS
 	tristate
 
-config LZ4KD_COMPRESS
-	tristate
-
 config LZ4_DECOMPRESS
 	tristate
-	
-config LZ4KD_DECOMPRESS
+
+config ZSTD_COMMON
+	select XXHASH
 	tristate
 
 config ZSTD_COMPRESS
-	select XXHASH
+	select ZSTD_COMMON
 	tristate
 
 config ZSTD_DECOMPRESS
-	select XXHASH
+	select ZSTD_COMMON
 	tristate
 
 source "lib/xz/Kconfig"
@@ -326,7 +322,7 @@ config GENERIC_ALLOCATOR
 #
 config REED_SOLOMON
 	tristate
-
+	
 config REED_SOLOMON_ENC8
 	bool
 
@@ -646,6 +642,3 @@ config GENERIC_LIB_CMPDI2
 
 config GENERIC_LIB_UCMPDI2
 	bool
-
-config CRYPTO_LIB_SHA256
-	tristate

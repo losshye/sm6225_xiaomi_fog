@@ -38,6 +38,7 @@ typedef __kernel_uid16_t        uid16_t;
 typedef __kernel_gid16_t        gid16_t;
 
 typedef unsigned long		uintptr_t;
+typedef long			intptr_t;
 
 #ifdef CONFIG_HAVE_UID16
 /* This is defined by include/asm-{arch}/posix_types.h */
@@ -232,6 +233,11 @@ struct callback_head {
 
 typedef void (*rcu_callback_t)(struct rcu_head *head);
 typedef void (*call_rcu_func_t)(struct rcu_head *head, rcu_callback_t func);
+
+typedef void (*swap_func_t)(void *a, void *b, int size);
+
+typedef int (*cmp_r_func_t)(const void *a, const void *b, const void *priv);
+typedef int (*cmp_func_t)(const void *a, const void *b);
 
 #endif /*  __ASSEMBLY__ */
 #endif /* _LINUX_TYPES_H */
