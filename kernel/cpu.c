@@ -155,6 +155,9 @@ static int cpuhp_invoke_callback(unsigned int cpu, enum cpuhp_state state,
 	int (*cb)(unsigned int cpu);
 	int ret, cnt;
 
+	if (cpu_isolated(cpu) != !bringup)
+		set_cpu_isolated(cpu, !bringup);
+
 	if (st->fail == state) {
 		st->fail = CPUHP_INVALID;
 

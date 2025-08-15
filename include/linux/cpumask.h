@@ -1021,6 +1021,11 @@ static inline bool cpu_active(unsigned int cpu)
 	return cpumask_test_cpu(cpu, cpu_active_mask);
 }
 
+static inline bool cpu_isolated(unsigned int cpu)
+{
+	return cpumask_test_cpu(cpu, cpu_isolated_mask);
+}
+
 #else
 
 #define num_online_cpus()	1U
@@ -1046,6 +1051,11 @@ static inline bool cpu_present(unsigned int cpu)
 static inline bool cpu_active(unsigned int cpu)
 {
 	return cpu == 0;
+}
+
+static inline bool cpu_isolated(unsigned int cpu)
+{
+	return false;
 }
 
 #endif /* NR_CPUS > 1 */
