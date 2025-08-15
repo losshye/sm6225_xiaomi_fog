@@ -96,12 +96,12 @@ extern struct cpumask __cpu_possible_mask;
 extern struct cpumask __cpu_online_mask;
 extern struct cpumask __cpu_present_mask;
 extern struct cpumask __cpu_active_mask;
-extern struct cpumask __cpu_dying_mask;
+extern struct cpumask __cpu_isolated_mask;
 #define cpu_possible_mask ((const struct cpumask *)&__cpu_possible_mask)
 #define cpu_online_mask   ((const struct cpumask *)&__cpu_online_mask)
 #define cpu_present_mask  ((const struct cpumask *)&__cpu_present_mask)
 #define cpu_active_mask   ((const struct cpumask *)&__cpu_active_mask)
-#define cpu_dying_mask    ((const struct cpumask *)&__cpu_dying_mask)
+#define cpu_isolated_mask ((const struct cpumask *)&__cpu_isolated_mask)
 extern const struct cpumask *const cpu_lp_mask;
 extern const struct cpumask *const cpu_perf_mask;
 
@@ -982,13 +982,14 @@ set_cpu_active(unsigned int cpu, bool active)
 }
 
 static inline void
-set_cpu_dying(unsigned int cpu, bool dying)
+set_cpu_isolated(unsigned int cpu, bool isolated)
 {
-	if (dying)
-		cpumask_set_cpu(cpu, &__cpu_dying_mask);
+	if (isolated)
+		cpumask_set_cpu(cpu, &__cpu_isolated_mask);
 	else
-		cpumask_clear_cpu(cpu, &__cpu_dying_mask);
+		cpumask_clear_cpu(cpu, &__cpu_isolated_mask);
 }
+
 
 /**
  * to_cpumask - convert an NR_CPUS bitmap to a struct cpumask *
