@@ -1894,7 +1894,7 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 		return cpu_online(cpu);
 
 	/* Regular kernel threads don't get to stay during offline. */
-	if (cpu_dying(cpu))
+	if (cpu_isolated(cpu))
 		return false;
 
 	/* But are allowed during online. */
@@ -2538,11 +2538,7 @@ static int __set_cpus_allowed_ptr_locked(struct task_struct *p,
 	int ret = 0;
 	cpumask_t allowed_mask;
 
-	/* Don't allow perf-critical threads to have non-perf affinities */
-	if ((p->flags & PF_PERF_CRITICAL) && new_mask != cpu_perf_mask)
-		return -EINVAL;
-
-	rq = task_rq_lock(p, &rf);
+	rq = task_rq_lock(p, rf);
 	update_rq_clock(rq);
 
 	if (kthread || is_migration_disabled(p)) {
