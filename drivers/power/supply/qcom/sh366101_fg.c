@@ -41,7 +41,7 @@
 #include <linux/pmic-voter.h>
 
 #undef FG_DEBUG
-#define FG_DEBUG 1
+#define FG_DEBUG 0
 
 #undef pr_debug
 #undef pr_info
